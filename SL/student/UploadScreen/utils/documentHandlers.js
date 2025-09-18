@@ -14,7 +14,6 @@ export const handleDocumentDownload = (docId, downloadUrl) => {
     ConsentFrom_student();
   } else if (docId === "consent_father_form") {
     ConsentFrom_father();
-    r;
   } else if (docId === "consent_mother_form") {
     ConsentFrom_mother();
   } else if (
@@ -35,3 +34,4 @@ export const handleDocumentDownload = (docId, downloadUrl) => {
     Alert.alert("ไม่พบไฟล์", "ไม่สามารถดาวน์โหลดไฟล์นี้ได้ในขณะนี้");
   }
 };
+
