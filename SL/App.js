@@ -22,6 +22,7 @@ import SignUpScreen from "./SignUpScreen";
 import DocumentStatusScreen from "./student/DocumentStatusScreen/DocumentStatusScreen";
 import DocCooldown from "./student/components/DocCooldown";
 import LoanProcessStatus from "./student/LoanProcessStatus";
+import NewsContentScreen from "./student/NewsContent";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -297,7 +298,11 @@ const App = () => {
         >
           <Stack.Screen name="LoginScreen" component={LoginScreen} />
           <Stack.Screen name="SignUpScreen" component={SignUpScreen} />
-          <Stack.Screen name="MainTabs" component={MainTabs} />
+          <Stack.Screen
+            name="MainTabs"
+            component={MainTabs}
+            options={{ title: "" }}
+          />
           <Stack.Screen
             name="Document Reccommend"
             component={DocRecScreen}
@@ -354,6 +359,11 @@ const App = () => {
             name="DocumentsHistoryScreen"
             component={DocumentsHistoryScreen}
             options={{ title: "ประวัติเอกสาร", headerShown: true }}
+          />
+          <Stack.Screen
+            name="NewsContentScreen"
+            component={NewsContentScreen}
+            options={{ title: "รายละเอียดข่าวสาร", headerShown: true }}
           />
         </Stack.Navigator>
       </NavigationContainer>
