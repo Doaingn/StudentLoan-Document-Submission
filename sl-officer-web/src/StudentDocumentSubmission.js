@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { db } from "./database/firebase";
-import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc, getDoc } from "firebase/firestore";
 
 const StudentDocumentSubmission = () => {
   const [submissions, setSubmissions] = useState([]);
@@ -9,6 +9,7 @@ const StudentDocumentSubmission = () => {
   const [selectedSubmission, setSelectedSubmission] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("pending");
+  const [appConfig, setAppConfig] = useState(null);
   
   // Document type mappings in Thai
   const documentTypes = {
@@ -53,12 +54,45 @@ const StudentDocumentSubmission = () => {
     fetchData();
   }, []);
 
+  const fetchAppConfig = async () => {
+      try {
+        const configRef = doc(db, "DocumentService", "config");
+        const configDoc = await getDoc(configRef);
+  
+        if (configDoc.exists()) {
+          const config = configDoc.data();
+          setAppConfig(config);
+          console.log("App config loaded:", config);
+          return config;
+        } else {
+          const defaultConfig = {
+            academicYear: "2567",
+            term: "1",
+            isEnabled: true,
+            immediateAccess: true,
+          };
+          setAppConfig(defaultConfig);
+          return defaultConfig;
+        }
+      } catch (error) {
+        console.error("Error fetching app config:", error);
+        return null;
+      }
+    };
+
   const fetchData = async () => {
     try {
       setLoading(true);
+      
+      const config = await fetchAppConfig();
+      if (!config || !config.academicYear || !config.term) {
+        console.error("Failed to fetch academicYear or term from app config. Aborting data fetch.");
+        setLoading(false);
+        return;
+      }
 
-      // Fetch document submissions
-      const submissionsRef = collection(db, "document_submissions_2568_1");
+      // Fetch document submissions dynamically
+      const submissionsRef = collection(db, `document_submissions_${config.academicYear}_${config.term}`);
       const submissionsSnap = await getDocs(submissionsRef);
       const submissionsData = [];
 
@@ -91,9 +125,15 @@ const StudentDocumentSubmission = () => {
     comments
   ) => {
     try {
+      const config = await fetchAppConfig();
+      if (!config || !config.academicYear || !config.term) {
+        console.error("Failed to fetch academicYear or term from app config. Aborting update.");
+        return;
+      }
+      
       const submissionRef = doc(
         db,
-        "document_submissions_2568_1",
+        `document_submissions_${config.academicYear}_${config.term}`,
         submissionId
       );
 
@@ -137,7 +177,13 @@ const StudentDocumentSubmission = () => {
   // ฟังก์ชันสำหรับอัพเดทหลายๆ เอกสารพร้อมกัน
   const updateMultipleDocuments = async (submissionId, documentTypes, status, comments) => {
     try {
-      const submissionRef = doc(db, "document_submissions_2568_1", submissionId);
+      const config = await fetchAppConfig();
+      if (!config || !config.academicYear || !config.term) {
+        console.error("Failed to fetch academicYear or term from app config. Aborting bulk update.");
+        return;
+      }
+      
+      const submissionRef = doc(db, `document_submissions_${config.academicYear}_${config.term}`, submissionId);
       const updateData = {};
 
       // สร้าง updateData สำหรับเอกสารหลายตัว
