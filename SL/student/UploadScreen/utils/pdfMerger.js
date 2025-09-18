@@ -1,5 +1,5 @@
-import * as FileSystem from 'expo-file-system';
-import * as Print from 'expo-print';
+import * as FileSystem from "expo-file-system/legacy"; // Changed to legacy import
+import * as Print from "expo-print";
 
 // ฟังก์ชันสำหรับรวมรูปภาพหลายไฟล์ให้เป็น PDF ไฟล์เดียว
 export const mergeImagesToPdf = async (imageFiles, docId) => {
@@ -9,12 +9,27 @@ export const mergeImagesToPdf = async (imageFiles, docId) => {
 
   try {
     // อ่านไฟล์รูปภาพเป็น base64 ในขั้นตอนเดียว
-    const filesWithBase64 = await Promise.all(imageFiles.map(async (file) => {
-      const base64Content = await FileSystem.readAsStringAsync(file.uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      return { ...file, base64Content };
-    }));
+    const filesWithBase64 = await Promise.all(
+      imageFiles.map(async (file) => {
+        try {
+          // Use legacy API with proper encoding type
+          const base64Content = await FileSystem.readAsStringAsync(file.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          return { ...file, base64Content };
+        } catch (error) {
+          console.error(
+            `Error reading file ${file.name || file.filename}:`,
+            error
+          );
+          throw new Error(
+            `ไม่สามารถอ่านไฟล์ ${file.name || file.filename} ได้: ${
+              error.message
+            }`
+          );
+        }
+      })
+    );
 
     const combinedHtmlContent = `
       <!DOCTYPE html>
@@ -44,9 +59,13 @@ export const mergeImagesToPdf = async (imageFiles, docId) => {
           </style>
       </head>
       <body>
-          ${filesWithBase64.map((file) => {
-            return `<img src="data:${file.mimeType || 'image/jpeg'};base64,${file.base64Content}" />`;
-          }).join('')}
+          ${filesWithBase64
+            .map((file) => {
+              return `<img src="data:${file.mimeType || "image/jpeg"};base64,${
+                file.base64Content
+              }" />`;
+            })
+            .join("")}
       </body>
       </html>
     `;
@@ -57,26 +76,27 @@ export const mergeImagesToPdf = async (imageFiles, docId) => {
     });
 
     const pdfInfo = await FileSystem.getInfoAsync(pdfUri);
-    
+
     // ตั้งชื่อไฟล์สำหรับ PDF ที่รวมแล้ว
     const mergedFileName = `${docId}.pdf`;
 
     const mergedPdfFile = {
       filename: mergedFileName,
       uri: pdfUri,
-      mimeType: 'application/pdf',
+      mimeType: "application/pdf",
       size: pdfInfo.size,
       uploadDate: new Date().toLocaleString("th-TH"),
       status: "pending",
       ocrValidated: true,
       convertedFromImage: true,
-      originalImageNames: imageFiles.map(file => (file.filename || file.name) ?? null),
+      originalImageNames: imageFiles.map(
+        (file) => (file.filename || file.name) ?? null
+      ),
     };
 
     return mergedPdfFile;
-
   } catch (error) {
-    console.error('Error in mergeImagesToPdf:', error);
+    console.error("Error in mergeImagesToPdf:", error);
     throw new Error(`ไม่สามารถรวมรูปภาพเป็น PDF ได้: ${error.message}`);
   }
 };
