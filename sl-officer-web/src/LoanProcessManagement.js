@@ -18,6 +18,7 @@ const LoanProcessManagement = () => {
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [appConfig, setAppConfig] = useState(null);
   
   // Bulk selection states
   const [selectedUsers, setSelectedUsers] = useState(new Set());
@@ -26,6 +27,7 @@ const LoanProcessManagement = () => {
   const [bulkStep, setBulkStep] = useState('document_collection');
   const [bulkStatus, setBulkStatus] = useState('pending');
   const [bulkNote, setBulkNote] = useState('');
+  
 
   // Process steps configuration
   const processSteps = [
@@ -61,12 +63,46 @@ const LoanProcessManagement = () => {
     fetchData();
   }, []);
 
+  const fetchAppConfig = async () => {
+    try {
+      const configRef = doc(db, "DocumentService", "config");
+      const configDoc = await getDoc(configRef);
+
+      if (configDoc.exists()) {
+        const config = configDoc.data();
+        setAppConfig(config);
+        console.log("App config loaded:", config);
+        return config;
+      } else {
+        const defaultConfig = {
+          academicYear: "2567",
+          term: "1",
+          isEnabled: true,
+          immediateAccess: true,
+        };
+        setAppConfig(defaultConfig);
+        return defaultConfig;
+      }
+    } catch (error) {
+      console.error("Error fetching app config:", error);
+      return null;
+    }
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
 
-      // Fetch document submissions
-      const submissionsRef = collection(db, "document_submissions_2568_1");
+      // Fetch app configuration first
+      const config = await fetchAppConfig();
+      if (!config) {
+        console.error("Failed to fetch app configuration. Aborting data fetch.");
+        setLoading(false);
+        return;
+      }
+
+      // Use the fetched academicYear and term in the collection path
+      const submissionsRef = collection(db, `document_submissions_${config.academicYear}_${config.term}`);
       const submissionsSnap = await getDocs(submissionsRef);
       const submissionsData = [];
 
