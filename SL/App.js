@@ -23,7 +23,7 @@ import DocumentStatusScreen from "./student/DocumentStatusScreen/DocumentStatusS
 import DocCooldown from "./student/components/DocCooldown";
 import LoanProcessStatus from "./student/LoanProcessStatus";
 import NewsContentScreen from "./student/NewsContent";
-
+import ChangePassword from "./student/Settings/ChangePassword";
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
@@ -62,10 +62,10 @@ const DocumentManagement = () => {
   const checkDocumentApprovalStatus = async (userId) => {
     try {
       // Get app config to determine current term
-      const configRef = doc(db, 'DocumentService', 'config');
+      const configRef = doc(db, "DocumentService", "config");
       const configDoc = await getDoc(configRef);
-      let collectionName = 'document_submissions';
-      
+      let collectionName = "document_submissions";
+
       if (configDoc.exists()) {
         const config = configDoc.data();
         const termId = `${config.academicYear}_${config.term}`;
@@ -100,19 +100,19 @@ const DocumentManagement = () => {
     if (submissionData.documentStatuses) {
       const statuses = Object.values(submissionData.documentStatuses);
       if (statuses.length === 0) return false;
-      
+
       // All documents must be approved
-      return statuses.every(doc => doc.status === "approved");
+      return statuses.every((doc) => doc.status === "approved");
     }
 
     // Fallback to old structure for backward compatibility
     if (submissionData.uploads) {
       const uploads = Object.values(submissionData.uploads);
       if (uploads.length === 0) return false;
-      
-      return uploads.every(upload => {
+
+      return uploads.every((upload) => {
         const files = Array.isArray(upload) ? upload : [upload];
-        return files.every(file => file.status === "approved");
+        return files.every((file) => file.status === "approved");
       });
     }
 
@@ -192,9 +192,11 @@ const UploadStack = () => {
       <Stack.Screen
         name="UploadMain"
         component={
-          hasSubmittedDocs 
-            ? DocumentManagement 
-            : (isEnabled ? UploadScreen : DocCooldown)
+          hasSubmittedDocs
+            ? DocumentManagement
+            : isEnabled
+            ? UploadScreen
+            : DocCooldown
         }
       />
       <Stack.Screen
@@ -243,14 +245,14 @@ const MainTabs = () => (
         let iconName;
         if (route.name === "หน้าหลัก") iconName = "home-outline";
         else if (route.name === "ส่งเอกสาร") iconName = "document-text-outline";
-        else if (route.name === "ตั้งค่า") iconName = "settings-outline";
+        else if (route.name === "ข้อมูลผู้ใช้") iconName = "person-outline";
         return <Ionicons name={iconName} size={size} color={color} />;
       },
     })}
   >
     <Tab.Screen name="หน้าหลัก" component={HomeStack} />
     <Tab.Screen name="ส่งเอกสาร" component={UploadStack} />
-    <Tab.Screen name="ตั้งค่า" component={SettingsScreen} />
+    <Tab.Screen name="ข้อมูลผู้ใช้" component={SettingsScreen} />
   </Tab.Navigator>
 );
 
@@ -364,6 +366,11 @@ const App = () => {
             name="NewsContentScreen"
             component={NewsContentScreen}
             options={{ title: "รายละเอียดข่าวสาร", headerShown: true }}
+          />
+          <Stack.Screen
+            name="ChangePassword"
+            component={ChangePassword}
+            options={{ title: "เปลี่ยนรหัสผ่าน", headerShown: true }}
           />
         </Stack.Navigator>
       </NavigationContainer>
