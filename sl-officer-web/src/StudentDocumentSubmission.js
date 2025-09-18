@@ -8,20 +8,39 @@ const StudentDocumentSubmission = () => {
   const [loading, setLoading] = useState(true);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("pending"); // เปลี่ยนจาก "all" เป็น "pending"
+  const [statusFilter, setStatusFilter] = useState("pending");
+  
   // Document type mappings in Thai
   const documentTypes = {
-    consent_student_form: "แบบฟอร์มยินยอมนักศึกษา",
-    fam_id_copies_gov: "สำเนาบัตรประชาชนครอบครัว (ราชการ)",
-    family_status_cert: "หนังสือรับรองสถานภาพครอบครัว",
-    form_101: "แบบฟอร์ม 101",
-    guar_id_copies_gov: "สำเนาบัตรประชาชนผู้ปกครอง (ราชการ)",
-    guardian_consent: "หนังสือยินยอมผู้ปกครอง",
-    guardian_id_copies: "สำเนาบัตรประชาชนผู้ปกครอง",
-    guardian_income: "หนังสือรับรองรายได้ผู้ปกครอง",
-    id_copies_student: "สำเนาบัตรประชาชนนักเรียน",
-    volunteer_doc: "เอกสารอาสาสมัคร",
-    guardian_income_cert: "หนังสือรับรองรายได้ผู้ปกครอง (ราชการ)",
+    'form_101': 'กยศ 101',
+    'volunteer_doc' : 'เอกสารจิตอาสา',
+    'id_copies_student': 'สำเนาบัตรประชาชนนักศึกษา',
+    'consent_student_form': 'หนังสือยินยอมเปิดเผยข้อมูลนักศึกษา',
+    'consent_father_form': 'หนังสือยินยอมเปิดเผยข้อมูลบิดา',
+    'id_copies_consent_father_form':'สำเนาบัตรประชาชนมารดา',
+    'id_copies_father': 'สำเนาบัตรประชาชนบิดา',
+    'consent_mother_form': 'หนังสือยินยอมเปิดเผยข้อมูลมารดา',
+    'id_copies_mother': 'สำเนาบัตรประชาชนมารดา',
+    'id_copies_consent_mother_form':'สำเนาบัตรประชาชนมารดา',
+    'guardian_consent' : 'หนังสือยินยอมเปิดเผยข้อมูลผู้ปกครอง',
+    'guardian_income_cert': 'หนังสือรับรองรายได้ผู้ปกครอง',
+    'father_income_cert': 'หนังสือรับรองรายได้บิดา',
+    'fa_id_copies_gov' : 'สำเนาบัตรข้าราชการผู้รับรอง',
+    'mother_income_cert': 'หนังสือรับรองรายได้มารดา',
+    'mo_id_copies_gov' : 'สำเนาบัตรข้าราชการผู้รับรอง',
+    'single_parent_income_cert': 'หนังสือรับรองรายได้',
+    'single_parent_income': 'หนังสือรับรองเงินเดือน',
+    'famo_income_cert': 'หนังสือรับรองรายได้บิดามารดา',
+    'famo_id_copies_gov': 'สำเนาบัตรข้าราชการผู้รับรอง',
+    'family_status_cert': 'หนังสือรับรองสถานภาพครอบครัว',
+    'father_income': 'หนังสือรับรองเงินเดือนบิดา',
+    'mother_income': 'หนังสือรับรองเงินเดือนมารดา',
+    'legal_status' : 'สำเนาใบหย่า (กรณีหย่าร้าง) หรือ สำเนาใบมรณบัตร (กรณีเสียชีวิต)',
+    'fam_id_copies_gov' : 'สำเนาบัตรข้าราชการผู้รับรอง',
+    '102_id_copies_gov' : 'สำเนาบัตรข้าราชการผู้รับรอง',
+    'guardian_id_copies' : 'สำเนาบัตรประชาชนผู้ปกครอง',
+    'guardian_income' : 'หนังสือรับรองเงินเดือนผู้ปกครอง',
+    'guar_id_copies_gov' : 'สำเนาบัตรข้าราชการผู้รับรอง',
   };
 
   const statusOptions = {
@@ -84,7 +103,7 @@ const StudentDocumentSubmission = () => {
         [`documentStatuses.${documentType}.comments`]: comments,
         [`documentStatuses.${documentType}.reviewedAt`]:
           new Date().toISOString(),
-        [`documentStatuses.${documentType}.reviewedBy`]: "admin", // You can replace this with actual admin info
+        [`documentStatuses.${documentType}.reviewedBy`]: "admin",
       };
 
       await updateDoc(submissionRef, updateData);
@@ -115,6 +134,49 @@ const StudentDocumentSubmission = () => {
     }
   };
 
+  // ฟังก์ชันสำหรับอัพเดทหลายๆ เอกสารพร้อมกัน
+  const updateMultipleDocuments = async (submissionId, documentTypes, status, comments) => {
+    try {
+      const submissionRef = doc(db, "document_submissions_2568_1", submissionId);
+      const updateData = {};
+
+      // สร้าง updateData สำหรับเอกสารหลายตัว
+      documentTypes.forEach(docType => {
+        updateData[`documentStatuses.${docType}.status`] = status;
+        updateData[`documentStatuses.${docType}.comments`] = comments;
+        updateData[`documentStatuses.${docType}.reviewedAt`] = new Date().toISOString();
+        updateData[`documentStatuses.${docType}.reviewedBy`] = "admin";
+      });
+
+      await updateDoc(submissionRef, updateData);
+
+      // Update local state
+      setSubmissions((prev) =>
+        prev.map((sub) => {
+          if (sub.id === submissionId) {
+            const newDocumentStatuses = { ...sub.documentStatuses };
+            documentTypes.forEach(docType => {
+              newDocumentStatuses[docType] = {
+                ...newDocumentStatuses[docType],
+                status,
+                comments,
+                reviewedAt: new Date().toISOString(),
+                reviewedBy: "admin",
+              };
+            });
+            return {
+              ...sub,
+              documentStatuses: newDocumentStatuses,
+            };
+          }
+          return sub;
+        })
+      );
+    } catch (error) {
+      console.error("Error updating multiple documents:", error);
+    }
+  };
+
   const filteredSubmissions = submissions.filter((submission) => {
     const userName = users[submission.userId]?.name || "";
     const matchesSearch = userName
@@ -133,6 +195,10 @@ const StudentDocumentSubmission = () => {
 
   const DocumentViewer = ({ submission }) => {
     const [documentStates, setDocumentStates] = useState({});
+    const [selectedDocuments, setSelectedDocuments] = useState(new Set());
+    const [bulkStatus, setBulkStatus] = useState("pending");
+    const [bulkComments, setBulkComments] = useState("");
+    const [selectAll, setSelectAll] = useState(false);
 
     const initializeDocumentStates = () => {
       const states = {};
@@ -149,6 +215,55 @@ const StudentDocumentSubmission = () => {
     useEffect(() => {
       initializeDocumentStates();
     }, [submission]);
+
+    // ฟังก์ชันสำหรับเลือกเอกสาร
+    const toggleDocumentSelection = (docType) => {
+      const newSelected = new Set(selectedDocuments);
+      if (newSelected.has(docType)) {
+        newSelected.delete(docType);
+      } else {
+        newSelected.add(docType);
+      }
+      setSelectedDocuments(newSelected);
+      setSelectAll(newSelected.size === Object.keys(submission.documentStatuses || {}).length);
+    };
+
+    // ฟังก์ชันสำหรับเลือกทั้งหมด
+    const toggleSelectAll = () => {
+      if (selectAll) {
+        setSelectedDocuments(new Set());
+      } else {
+        setSelectedDocuments(new Set(Object.keys(submission.documentStatuses || {})));
+      }
+      setSelectAll(!selectAll);
+    };
+
+    // ฟังก์ชันสำหรับอัพเดทสถานะหลายตัวพร้อมกัน
+    const handleBulkUpdate = async () => {
+      if (selectedDocuments.size === 0) {
+        alert("กรุณาเลือกเอกสารที่ต้องการอัพเดท");
+        return;
+      }
+
+      if (window.confirm(`ต้องการอัพเดทสถานะของเอกสาร ${selectedDocuments.size} รายการเป็น "${statusOptions[bulkStatus]}" หรือไม่?`)) {
+        await updateMultipleDocuments(
+          submission.id,
+          Array.from(selectedDocuments),
+          bulkStatus,
+          bulkComments
+        );
+        
+        // รีเซ็ตการเลือก
+        setSelectedDocuments(new Set());
+        setSelectAll(false);
+        setBulkComments("");
+        
+        // รีเซ็ต document states
+        initializeDocumentStates();
+        
+        alert("อัพเดทสถานะเรียบร้อยแล้ว");
+      }
+    };
 
     const handleStatusChange = (docType, newStatus) => {
       setDocumentStates((prev) => ({
@@ -189,6 +304,57 @@ const StudentDocumentSubmission = () => {
           เอกสารของ {users[submission.userId]?.name || "ไม่ระบุชื่อ"}
         </h2>
 
+        {/* Bulk Update Controls */}
+        <div style={styles.bulkControls}>
+          <h3 style={styles.bulkTitle}>จัดการหลายเอกสารพร้อมกัน</h3>
+          <div style={styles.bulkRow}>
+            <label style={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={selectAll}
+                onChange={toggleSelectAll}
+                style={styles.checkbox}
+              />
+              เลือกทั้งหมด ({selectedDocuments.size} รายการ)
+            </label>
+          </div>
+          
+          {selectedDocuments.size > 0 && (
+            <div style={styles.bulkActionsContainer}>
+              <div style={styles.bulkInputsRow}>
+                <div>
+                  <label style={styles.label}>กำหนดสถานะ:</label>
+                  <select
+                    value={bulkStatus}
+                    onChange={(e) => setBulkStatus(e.target.value)}
+                    style={styles.select}
+                  >
+                    <option value="pending">รอการตรวจสอบ</option>
+                    <option value="approved">เอกสารถูกต้อง</option>
+                    <option value="rejected">เอกสารไม่ถูกต้อง</option>
+                  </select>
+                </div>
+                <div style={styles.bulkCommentsContainer}>
+                  <label style={styles.label}>หมายเหตุสำหรับทุกรายการ:</label>
+                  <textarea
+                    value={bulkComments}
+                    onChange={(e) => setBulkComments(e.target.value)}
+                    style={styles.textarea}
+                    placeholder="ใส่หมายเหตุสำหรับเอกสารที่เลือก"
+                    rows={2}
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleBulkUpdate}
+                style={styles.bulkUpdateButton}
+              >
+                อัพเดทเอกสาร {selectedDocuments.size} รายการ
+              </button>
+            </div>
+          )}
+        </div>
+
         <div style={styles.documentsGrid}>
           {Object.keys(submission.documentStatuses || {}).map((docType) => {
             const docData = submission.documentStatuses[docType];
@@ -197,12 +363,30 @@ const StudentDocumentSubmission = () => {
               status: "pending",
               comments: "",
             };
+            const isSelected = selectedDocuments.has(docType);
 
             return (
-              <div key={docType} style={styles.documentCard}>
-                <h3 style={styles.documentTitle}>
-                  {documentTypes[docType] || docType}
-                </h3>
+              <div 
+                key={docType} 
+                style={{
+                  ...styles.documentCard,
+                  ...(isSelected ? styles.documentCardSelected : {}),
+                }}
+              >
+                {/* Checkbox สำหรับเลือกเอกสาร */}
+                <div style={styles.documentHeader}>
+                  <label style={styles.documentCheckboxLabel}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleDocumentSelection(docType)}
+                      style={styles.checkbox}
+                    />
+                    <h3 style={styles.documentTitle}>
+                      {documentTypes[docType] || docType}
+                    </h3>
+                  </label>
+                </div>
 
                 <div style={styles.documentInfo}>
                   <p>จำนวนไฟล์: {docData.fileCount || 0}</p>
@@ -244,7 +428,7 @@ const StudentDocumentSubmission = () => {
                             />
                             <div style={styles.fileName}>
                               เล็งที่เอกสาร Ctrl + ลูกกลิ้งเมาส์ เพื่อ
-                              ซูมเข้า/ออก{file.originalFileName}
+                              ซูมเข้า/ออก {file.originalFileName}
                             </div>
                           </div>
                         ) : file.mimeType === "application/pdf" ? (
@@ -545,6 +729,65 @@ const styles = {
     cursor: "pointer",
     marginBottom: 20,
   },
+  // Bulk Update Styles
+  bulkControls: {
+    background: "#f8f9fa",
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 30,
+    border: "2px solid #e9ecef",
+  },
+  bulkTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 15,
+    marginTop: 0,
+  },
+  bulkRow: {
+    marginBottom: 15,
+  },
+  checkboxLabel: {
+    display: "flex",
+    alignItems: "center",
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#495057",
+    cursor: "pointer",
+  },
+  checkbox: {
+    marginRight: 8,
+    width: 16,
+    height: 16,
+    cursor: "pointer",
+  },
+  bulkActionsContainer: {
+    background: "#fff",
+    padding: 20,
+    borderRadius: 8,
+    border: "1px solid #dee2e6",
+    marginTop: 15,
+  },
+  bulkInputsRow: {
+    display: "flex",
+    gap: 20,
+    marginBottom: 15,
+    flexWrap: "wrap",
+  },
+  bulkCommentsContainer: {
+    flex: 1,
+    minWidth: 300,
+  },
+  bulkUpdateButton: {
+    padding: "12px 24px",
+    fontSize: 16,
+    backgroundColor: "#007bff",
+    color: "white",
+    border: "none",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
   documentsGrid: {
     display: "grid",
     gap: 20,
@@ -556,12 +799,27 @@ const styles = {
     borderRadius: 12,
     boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
     border: "1px solid #e0e0e0",
+    transition: "border-color 0.2s, box-shadow 0.2s",
+  },
+  documentCardSelected: {
+    border: "2px solid #007bff",
+    boxShadow: "0 6px 16px rgba(0,123,255,0.2)",
+  },
+  documentHeader: {
+    marginBottom: 15,
+  },
+  documentCheckboxLabel: {
+    display: "flex",
+    alignItems: "flex-start",
+    cursor: "pointer",
+    gap: 10,
   },
   documentTitle: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#333",
-    marginBottom: 10,
+    margin: 0,
+    flex: 1,
   },
   documentInfo: {
     marginBottom: 15,
@@ -598,43 +856,12 @@ const styles = {
     overflow: "hidden",
     backgroundColor: "#fff",
   },
-  pdfControls: {
-    display: "flex",
-    gap: 10,
-    marginTop: 10,
-    flexWrap: "wrap",
-    justifyContent: "center",
-  },
   fileName: {
     fontSize: 14,
     color: "#3b82f6",
     marginTop: 8,
     textAlign: "center",
     wordBreak: "break-word",
-  },
-  downloadLink: {
-    fontSize: 13,
-    color: "#28a745",
-    textDecoration: "none",
-    padding: "8px 12px",
-    backgroundColor: "#e8f5e8",
-    borderRadius: 4,
-    border: "1px solid #28a745",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 5,
-  },
-  downloadButton: {
-    fontSize: 13,
-    color: "#fff",
-    backgroundColor: "#007bff",
-    border: "1px solid #007bff",
-    padding: "8px 12px",
-    borderRadius: 4,
-    cursor: "pointer",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 5,
   },
   documentLink: {
     fontSize: 16,
