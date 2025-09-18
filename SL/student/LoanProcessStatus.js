@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,10 +6,11 @@ import {
   ScrollView,
   Alert,
   RefreshControl,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { db, auth } from '../database/firebase';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { db, auth } from "../database/firebase";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const LoanProcessStatus = ({ navigation }) => {
   const [processStatus, setProcessStatus] = useState(null);
@@ -19,22 +20,22 @@ const LoanProcessStatus = ({ navigation }) => {
 
   const processSteps = [
     {
-      id: 'document_collection',
-      title: 'รวบรวมเอกสาร',
-      description: 'เจ้าหน้าที่กำลังรวบรวมเอกสารของผู้กู้ทั้งหมด',
-      icon: 'folder-outline',
+      id: "document_collection",
+      title: "รวบรวมเอกสาร",
+      description: "เจ้าหน้าที่กำลังรวบรวมเอกสารของผู้กู้ทั้งหมด",
+      icon: "folder-outline",
     },
     {
-      id: 'document_organization',
-      title: 'จัดเรียงเอกสาร',
-      description: 'จัดเรียงเอกสารเพื่อเตรียมส่งให้ธนาคาร',
-      icon: 'library-outline',
+      id: "document_organization",
+      title: "จัดเรียงเอกสาร",
+      description: "จัดเรียงเอกสารเพื่อเตรียมส่งให้ธนาคาร",
+      icon: "library-outline",
     },
     {
-      id: 'bank_submission',
-      title: 'ส่งเอกสารไปยังธนาคาร',
-      description: 'ส่งเอกสารให้ธนาคารพิจารณาการกู้ยืม',
-      icon: 'business-outline',
+      id: "bank_submission",
+      title: "ส่งเอกสารไปยังธนาคาร",
+      description: "ส่งเอกสารให้ธนาคารพิจารณาการกู้ยืม",
+      icon: "business-outline",
     },
   ];
 
@@ -45,7 +46,7 @@ const LoanProcessStatus = ({ navigation }) => {
       const userId = auth.currentUser?.uid;
       if (!userId) return;
 
-      const processDocRef = doc(db, 'loan_process_status', userId);
+      const processDocRef = doc(db, "loan_process_status", userId);
       const unsubscribe = onSnapshot(processDocRef, (doc) => {
         if (doc.exists()) {
           setProcessStatus(doc.data());
@@ -71,46 +72,45 @@ const LoanProcessStatus = ({ navigation }) => {
       }
 
       // Fetch process status
-      const processDocRef = doc(db, 'loan_process_status', userId);
+      const processDocRef = doc(db, "loan_process_status", userId);
       const processDoc = await getDoc(processDocRef);
-      
+
       if (processDoc.exists()) {
         setProcessStatus(processDoc.data());
       } else {
         // Initialize default status if doesn't exist
         const defaultStatus = {
-          currentStep: 'document_collection',
+          currentStep: "document_collection",
           steps: {
             document_collection: {
-              status: 'in_progress',
+              status: "in_progress",
               updatedAt: new Date().toISOString(),
-              note: 'เริ่มกระบวนการรวบรวมเอกสาร'
+              note: "เริ่มกระบวนการรวบรวมเอกสาร",
             },
             document_organization: {
-              status: 'pending',
+              status: "pending",
               updatedAt: null,
-              note: null
+              note: null,
             },
             bank_submission: {
-              status: 'pending',
+              status: "pending",
               updatedAt: null,
-              note: null
-            }
+              note: null,
+            },
           },
-          overallStatus: 'processing',
+          overallStatus: "processing",
           createdAt: new Date().toISOString(),
-          lastUpdatedAt: new Date().toISOString()
+          lastUpdatedAt: new Date().toISOString(),
         };
         setProcessStatus(defaultStatus);
       }
 
       // Also fetch submission data for display
-      const submissionDocRef = doc(db, 'document_submissions', userId);
+      const submissionDocRef = doc(db, "document_submissions", userId);
       const submissionDoc = await getDoc(submissionDocRef);
       if (submissionDoc.exists()) {
         setSubmissionData(submissionDoc.data());
       }
-
     } catch (error) {
       console.error("Error fetching process status:", error);
       Alert.alert("ข้อผิดพลาด", "ไม่สามารถโหลดข้อมูลสถานะได้");
@@ -126,8 +126,8 @@ const LoanProcessStatus = ({ navigation }) => {
   };
 
   const getStepStatus = (stepId) => {
-    if (!processStatus?.steps) return 'pending';
-    return processStatus.steps[stepId]?.status || 'pending';
+    if (!processStatus?.steps) return "pending";
+    return processStatus.steps[stepId]?.status || "pending";
   };
 
   const getStepNote = (stepId) => {
@@ -139,51 +139,51 @@ const LoanProcessStatus = ({ navigation }) => {
     if (!processStatus?.steps) return null;
     const updatedAt = processStatus.steps[stepId]?.updatedAt;
     if (!updatedAt) return null;
-    return new Date(updatedAt).toLocaleDateString('th-TH', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    return new Date(updatedAt).toLocaleDateString("th-TH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'completed':
-        return '#10b981';
-      case 'in_progress':
-        return '#f59e0b';
-      case 'pending':
-        return '#6b7280';
+      case "completed":
+        return "#10b981";
+      case "in_progress":
+        return "#f59e0b";
+      case "pending":
+        return "#6b7280";
       default:
-        return '#6b7280';
+        return "#6b7280";
     }
   };
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'completed':
-        return 'checkmark-circle';
-      case 'in_progress':
-        return 'time';
-      case 'pending':
-        return 'ellipse-outline';
+      case "completed":
+        return "checkmark-circle";
+      case "in_progress":
+        return "time";
+      case "pending":
+        return "ellipse-outline";
       default:
-        return 'ellipse-outline';
+        return "ellipse-outline";
     }
   };
 
   const getStatusText = (status) => {
     switch (status) {
-      case 'completed':
-        return 'เสร็จสิ้น';
-      case 'in_progress':
-        return 'กำลังดำเนินการ';
-      case 'pending':
-        return 'รอดำเนินการ';
+      case "completed":
+        return "เสร็จสิ้น";
+      case "in_progress":
+        return "กำลังดำเนินการ";
+      case "pending":
+        return "รอดำเนินการ";
       default:
-        return 'รอดำเนินการ';
+        return "รอดำเนินการ";
     }
   };
 
@@ -198,11 +198,7 @@ const LoanProcessStatus = ({ navigation }) => {
       <View key={step.id} style={styles.stepContainer}>
         <View style={styles.stepHeader}>
           <View style={[styles.stepIcon, { backgroundColor: statusColor }]}>
-            <Ionicons 
-              name={getStatusIcon(stepStatus)} 
-              size={24} 
-              color="#fff" 
-            />
+            <Ionicons name={getStatusIcon(stepStatus)} size={24} color="#fff" />
           </View>
           <View style={styles.stepContent}>
             <Text style={styles.stepTitle}>{step.title}</Text>
@@ -212,9 +208,7 @@ const LoanProcessStatus = ({ navigation }) => {
                 {getStatusText(stepStatus)}
               </Text>
               {updatedAt && (
-                <Text style={styles.stepTime}>
-                  อัพเดทเมื่อ: {updatedAt}
-                </Text>
+                <Text style={styles.stepTime}>อัพเดทเมื่อ: {updatedAt}</Text>
               )}
             </View>
             {stepNote && (
@@ -225,45 +219,54 @@ const LoanProcessStatus = ({ navigation }) => {
           </View>
         </View>
         {!isLastStep && (
-          <View style={[
-            styles.stepConnector,
-            { 
-              backgroundColor: stepStatus === 'completed' ? '#10b981' : '#e5e7eb',
-            }
-          ]} />
+          <View
+            style={[
+              styles.stepConnector,
+              {
+                backgroundColor:
+                  stepStatus === "completed" ? "#10b981" : "#e5e7eb",
+              },
+            ]}
+          />
         )}
       </View>
     );
   };
 
   const renderOverallStatus = () => {
-    const overallStatus = processStatus?.overallStatus || 'processing';
+    const overallStatus = processStatus?.overallStatus || "processing";
     const currentStep = processStatus?.currentStep;
-    const currentStepInfo = processSteps.find(step => step.id === currentStep);
-    
-    let statusMessage = '';
-    let statusColor = '#f59e0b';
-    let statusIcon = 'time';
+    const currentStepInfo = processSteps.find(
+      (step) => step.id === currentStep
+    );
+
+    let statusMessage = "";
+    let statusColor = "#f59e0b";
+    let statusIcon = "time";
 
     switch (overallStatus) {
-      case 'completed':
-        statusMessage = 'เอกสารของคุณถูกส่งไปยังธนาคารเรียบร้อยแล้ว';
-        statusColor = '#10b981';
-        statusIcon = 'checkmark-circle';
+      case "completed":
+        statusMessage = "เอกสารของคุณถูกส่งไปยังธนาคารเรียบร้อยแล้ว";
+        statusColor = "#10b981";
+        statusIcon = "checkmark-circle";
         break;
-      case 'processing':
-        statusMessage = `กำลังดำเนินการ: ${currentStepInfo?.title || 'รวบรวมเอกสาร'}`;
-        statusColor = '#f59e0b';
-        statusIcon = 'time';
+      case "processing":
+        statusMessage = `กำลังดำเนินการ: ${
+          currentStepInfo?.title || "รวบรวมเอกสาร"
+        }`;
+        statusColor = "#f59e0b";
+        statusIcon = "time";
         break;
       default:
-        statusMessage = 'รอเริ่มกระบวนการ';
-        statusColor = '#6b7280';
-        statusIcon = 'ellipse-outline';
+        statusMessage = "รอเริ่มกระบวนการ";
+        statusColor = "#6b7280";
+        statusIcon = "ellipse-outline";
     }
 
     return (
-      <View style={[styles.overallStatusCard, { borderLeftColor: statusColor }]}>
+      <View
+        style={[styles.overallStatusCard, { borderLeftColor: statusColor }]}
+      >
         <View style={styles.overallStatusHeader}>
           <Ionicons name={statusIcon} size={24} color={statusColor} />
           <Text style={[styles.overallStatusTitle, { color: statusColor }]}>
@@ -273,12 +276,13 @@ const LoanProcessStatus = ({ navigation }) => {
         <Text style={styles.overallStatusMessage}>{statusMessage}</Text>
         {processStatus?.lastUpdatedAt && (
           <Text style={styles.lastUpdated}>
-            อัพเดทล่าสุด: {new Date(processStatus.lastUpdatedAt).toLocaleDateString('th-TH', {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
+            อัพเดทล่าสุด:{" "}
+            {new Date(processStatus.lastUpdatedAt).toLocaleDateString("th-TH", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
             })}
           </Text>
         )}
@@ -288,141 +292,153 @@ const LoanProcessStatus = ({ navigation }) => {
 
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
+      <SafeAreaView
+        style={styles.loadingContainer}
+        edges={["top", "left", "right"]}
+      >
         <Ionicons name="refresh" size={48} color="#3b82f6" />
         <Text style={styles.loadingText}>กำลังโหลดข้อมูล...</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <ScrollView 
-      contentContainerStyle={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      {/* Header */}
-      <View style={styles.header}>
-        <Ionicons name="document-text" size={32} color="#3b82f6" />
-        <Text style={styles.headerTitle}>สถานะการดำเนินการ</Text>
-        <Text style={styles.headerSubtitle}>
-          ติดตามความคืบหน้าการประมวลผลเอกสารของคุณ
-        </Text>
-      </View>
-
-      {/* Overall Status */}
-      {renderOverallStatus()}
-
-      {/* Process Steps */}
-      <View style={styles.stepsSection}>
-        <Text style={styles.sectionTitle}>ขั้นตอนการดำเนินการ</Text>
-        <View style={styles.stepsContainer}>
-          {processSteps.map((step, index) => renderProcessStep(step, index))}
+    <SafeAreaView style={styles.safeContainer} edges={["top", "left", "right"]}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Ionicons name="document-text" size={32} color="#3b82f6" />
+          <Text style={styles.headerTitle}>สถานะการดำเนินการ</Text>
+          <Text style={styles.headerSubtitle}>
+            ติดตามความคืบหน้าการประมวลผลเอกสารของคุณ
+          </Text>
         </View>
-      </View>
 
-      {/* Info Card */}
-      <View style={styles.infoCard}>
-        <View style={styles.infoHeader}>
-          <Ionicons name="information-circle-outline" size={20} color="#3b82f6" />
-          <Text style={styles.infoTitle}>หมายเหตุ</Text>
+        {/* Overall Status */}
+        {renderOverallStatus()}
+
+        {/* Process Steps */}
+        <View style={styles.stepsSection}>
+          <Text style={styles.sectionTitle}>ขั้นตอนการดำเนินการ</Text>
+          <View style={styles.stepsContainer}>
+            {processSteps.map((step, index) => renderProcessStep(step, index))}
+          </View>
         </View>
-        <Text style={styles.infoText}>
-          • เจ้าหน้าที่จะอัพเดทสถานะให้คุณทราบในแต่ละขั้นตอน{'\n'}
-          • กระบวนการทั้งหมดอาจใช้เวลา 3-5 วันทำการ{'\n'}
-          • หากมีข้อสงสัยสามารถติดต่อเจ้าหน้าที่ได้
-        </Text>
-      </View>
-    </ScrollView>
+
+        {/* Info Card */}
+        <View style={styles.infoCard}>
+          <View style={styles.infoHeader}>
+            <Ionicons
+              name="information-circle-outline"
+              size={20}
+              color="#3b82f6"
+            />
+            <Text style={styles.infoTitle}>หมายเหตุ</Text>
+          </View>
+          <Text style={styles.infoText}>
+            • เจ้าหน้าที่จะอัพเดทสถานะให้คุณทราบในแต่ละขั้นตอน{"\n"}•
+            กระบวนการทั้งหมดอาจใช้เวลา 3-5 วันทำการ{"\n"}•
+            หากมีข้อสงสัยสามารถติดต่อเจ้าหน้าที่ได้
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeContainer: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
   container: {
     flexGrow: 1,
-    backgroundColor: '#f8fafc',
     padding: 16,
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
   },
   loadingText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: "#6b7280",
     marginTop: 12,
   },
   header: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 24,
     borderRadius: 16,
     marginBottom: 20,
-    alignItems: 'center',
-    shadowColor: '#000',
+    alignItems: "center",
+    shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 3,
   },
   headerTitle: {
     fontSize: 24,
-    fontWeight: '700',
-    color: '#1e293b',
+    fontWeight: "700",
+    color: "#1e293b",
     marginTop: 12,
     marginBottom: 8,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#64748b',
-    textAlign: 'center',
+    color: "#64748b",
+    textAlign: "center",
   },
   overallStatusCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 20,
     borderRadius: 16,
     marginBottom: 20,
     borderLeftWidth: 4,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 3,
   },
   overallStatusHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 12,
   },
   overallStatusTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: "600",
     marginLeft: 8,
   },
   overallStatusMessage: {
     fontSize: 16,
-    color: '#374151',
+    color: "#374151",
     marginBottom: 8,
     lineHeight: 24,
   },
   lastUpdated: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: "#9ca3af",
   },
   stepsSection: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 20,
     borderRadius: 16,
     marginBottom: 20,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 3,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1e293b',
+    fontWeight: "600",
+    color: "#1e293b",
     marginBottom: 20,
   },
   stepsContainer: {
@@ -432,15 +448,15 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   stepHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
   },
   stepIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 16,
   },
   stepContent: {
@@ -449,40 +465,40 @@ const styles = StyleSheet.create({
   },
   stepTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1e293b',
+    fontWeight: "600",
+    color: "#1e293b",
     marginBottom: 4,
   },
   stepDescription: {
     fontSize: 14,
-    color: '#64748b',
+    color: "#64748b",
     marginBottom: 8,
     lineHeight: 20,
   },
   stepStatusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 8,
   },
   stepStatus: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   stepTime: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: "#9ca3af",
   },
   noteContainer: {
-    backgroundColor: '#f1f5f9',
+    backgroundColor: "#f1f5f9",
     padding: 12,
     borderRadius: 8,
     borderLeftWidth: 3,
-    borderLeftColor: '#3b82f6',
+    borderLeftColor: "#3b82f6",
   },
   noteText: {
     fontSize: 14,
-    color: '#334155',
+    color: "#334155",
     lineHeight: 20,
   },
   stepConnector: {
@@ -492,27 +508,27 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   infoCard: {
-    backgroundColor: '#f0f9ff',
+    backgroundColor: "#f0f9ff",
     padding: 16,
     borderRadius: 12,
     marginBottom: 20,
     borderLeftWidth: 4,
-    borderLeftColor: '#3b82f6',
+    borderLeftColor: "#3b82f6",
   },
   infoHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 8,
   },
   infoTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1e40af',
+    fontWeight: "600",
+    color: "#1e40af",
     marginLeft: 8,
   },
   infoText: {
     fontSize: 14,
-    color: '#1e40af',
+    color: "#1e40af",
     lineHeight: 20,
   },
 });
