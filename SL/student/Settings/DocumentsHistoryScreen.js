@@ -45,6 +45,7 @@ const DocumentsHistoryScreen = ({ navigation }) => {
     id_copies_student: "สำเนาบัตรประชาชนนักศึกษา",
     consent_student_form: "หนังสือยินยอมเปิดเผยข้อมูลนักศึกษา",
     consent_father_form: "หนังสือยินยอมเปิดเผยข้อมูลบิดา",
+    id_copies_consent_father_form: "สำเนาบัตรประชาชนมารดา",
     id_copies_father: "สำเนาบัตรประชาชนบิดา",
     consent_mother_form: "หนังสือยินยอมเปิดเผยข้อมูลมารดา",
     id_copies_mother: "สำเนาบัตรประชาชนมารดา",
@@ -840,4 +841,3 @@ const styles = StyleSheet.create({
 });
 
 export default DocumentsHistoryScreen;
-

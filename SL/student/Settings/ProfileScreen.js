@@ -284,7 +284,7 @@ const ProfileScreen = ({ navigation }) => {
               keyboardType={inputType === "numeric" ? "numeric" : "default"}
             />
             <TouchableOpacity onPress={saveEdit} style={styles.saveButton}>
-              <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
             </TouchableOpacity>
           </View>
         ) : (
@@ -329,7 +329,7 @@ const ProfileScreen = ({ navigation }) => {
       <View style={styles.addressSection}>
         <View style={styles.addressHeader}>
           <View style={styles.addressHeaderIcon}>
-            <Ionicons name={icon} size={20} color="#2563eb" />
+            <Ionicons name={icon} size={16} color="#2563eb" />
           </View>
           <Text style={styles.addressTitle}>{label}</Text>
         </View>
@@ -392,7 +392,7 @@ const ProfileScreen = ({ navigation }) => {
           <View style={styles.chevronContainer}>
             <Ionicons
               name={isExpanded ? "chevron-up" : "chevron-down"}
-              size={20}
+              size={16}
               color="#9CA3AF"
             />
           </View>
@@ -498,7 +498,7 @@ const ProfileScreen = ({ navigation }) => {
                   <View style={styles.workplaceHeaderIcon}>
                     <Ionicons
                       name="business-outline"
-                      size={20}
+                      size={16}
                       color="#2563eb"
                     />
                   </View>
