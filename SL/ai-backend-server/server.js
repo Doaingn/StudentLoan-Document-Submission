@@ -1,4 +1,4 @@
-// server.js - AI Backend Server with Express.js and Gemini (Fixed Version)
+// server.js - AI Backend Server with Express.js and Gemini (Complete Version with ID Card)
 const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
@@ -311,6 +311,136 @@ app.post('/ai/validate/consent/:formType', upload.single('document'), async (req
   }
 });
 
+// Validate ID Card document
+app.post('/ai/validate/idcard/:idType', upload.single('document'), async (req, res) => {
+  try {
+    const { idType } = req.params; // student, father, mother, guardian
+    
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'No file uploaded'
+      });
+    }
+
+    if (!['student', 'father', 'mother', 'guardian'].includes(idType)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid ID type. Must be: student, father, mother, or guardian'
+      });
+    }
+
+    console.log(`Processing ${idType} ID card: ${req.file.filename}`);
+
+    const filePart = fileToGenerativePart(req.file.path, req.file.mimetype);
+
+    const idTypeText = {
+      'student': 'นักเรียน/นักศึกษา',
+      'father': 'บิดา',
+      'mother': 'มารดา',
+      'guardian': 'ผู้ปกครอง'
+    };
+
+    const prompt = `
+ตรวจสอบเอกสารนี้ว่าเป็นสำเนาบัตรประชาชนของ${idTypeText[idType]} หรือไม่
+
+กรุณาตรวจสอบและตอบในรูปแบบ JSON ดังนี้:
+{
+  "isIDCard": true/false,
+  "idType": "${idType}",
+  "confidence": 0-100,
+  "cardType": "บัตรประชาชน/บัตรข้าราชการ/พาสปอร์ต/อื่นๆ",
+  "isValidIDNumber": true/false,
+  "isExpired": true/false/null,
+  "imageQuality": "clear/blurry/poor/excellent",
+  "extractedData": {
+    "idNumber": "เลขบัตรประชาชน",
+    "name": "ชื่อ-นามสกุล",
+    "nameEn": "ชื่อ-นามสกุลภาษาอังกฤษ",
+    "dateOfBirth": "วันเกิด",
+    "issueDate": "วันที่ออกบัตร",
+    "expiryDate": "วันหมดอายุ",
+    "address": "ที่อยู่",
+    "religion": "ศาสนา"
+  },
+  "securityFeatures": {
+    "hasWatermark": true/false,
+    "hasHologram": true/false,
+    "hasMRZCode": true/false
+  },
+  "qualityIssues": ["ปัญหาที่พบ"],
+  "recommendations": ["คำแนะนำ"],
+  "overall_status": "valid/invalid/needs_review"
+}
+
+ให้ความสำคัญกับ:
+1. การตรวจสอบว่าเป็นบัตรประชาชนไทยจริง
+2. เลขประจำตัวประชาชน 13 หลัก
+3. ความชัดเจนของข้อมูลและรูปภาพ
+4. วันหมดอายุของบัตร
+5. ลักษณะการรักษาความปลอดภัยของบัตร (watermark, hologram)
+6. ความสมบูรณ์ของข้อมูลที่จำเป็น
+`;
+
+    const result = await model.generateContent([prompt, filePart]);
+    const response = await result.response;
+    const responseText = response.text();
+
+    // Parse JSON response
+    let aiResult;
+    try {
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        aiResult = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('No JSON found in response');
+      }
+    } catch (parseError) {
+      // Fallback response
+      aiResult = {
+        isIDCard: responseText.toLowerCase().includes('บัตรประชาชน'),
+        idType: idType,
+        confidence: 50,
+        cardType: 'ไม่ทราบ',
+        isValidIDNumber: responseText.toLowerCase().includes('เลขประจำตัว'),
+        isExpired: null,
+        imageQuality: 'unclear',
+        extractedData: {},
+        securityFeatures: {},
+        qualityIssues: ['ไม่สามารถวิเคราะห์รายละเอียดได้'],
+        recommendations: ['ไม่สามารถวิเคราะห์รายละเอียดได้'],
+        overall_status: 'needs_review',
+        rawResponse: responseText
+      };
+    }
+
+    // Clean up uploaded file
+    fs.unlinkSync(req.file.path);
+
+    res.json({
+      success: true,
+      filename: req.file.originalname,
+      idType: idType,
+      validation: aiResult,
+      processedAt: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('ID Card validation error:', error);
+    
+    // Clean up file on error
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    res.status(500).json({
+      success: false,
+      error: 'Validation failed',
+      details: error.message
+    });
+  }
+});
+
 // Batch validation endpoint
 app.post('/ai/validate/batch', upload.array('documents', 10), async (req, res) => {
   try {
@@ -331,6 +461,8 @@ app.post('/ai/validate/batch', upload.array('documents', 10), async (req, res) =
           documentType = 'form101';
         } else if (file.originalname.toLowerCase().includes('consent') || file.originalname.toLowerCase().includes('ยินยอม')) {
           documentType = 'consent';
+        } else if (file.originalname.toLowerCase().includes('id') || file.originalname.toLowerCase().includes('บัตร')) {
+          documentType = 'idcard';
         }
 
         const filePart = fileToGenerativePart(file.path, file.mimetype);
@@ -443,6 +575,7 @@ app.use((req, res) => {
       'GET /ai/test',
       'POST /ai/validate/form101',
       'POST /ai/validate/consent/:formType',
+      'POST /ai/validate/idcard/:idType',
       'POST /ai/validate/batch'
     ]
   });
@@ -455,6 +588,7 @@ app.listen(PORT, () => {
   console.log(`🔬 AI test: http://localhost:${PORT}/ai/test`);
   console.log(`📄 Form 101 validation: POST http://localhost:${PORT}/ai/validate/form101`);
   console.log(`📋 Consent validation: POST http://localhost:${PORT}/ai/validate/consent/:formType`);
+  console.log(`🆔 ID Card validation: POST http://localhost:${PORT}/ai/validate/idcard/:idType`);
   console.log(`📦 Batch validation: POST http://localhost:${PORT}/ai/validate/batch`);
 });
 
