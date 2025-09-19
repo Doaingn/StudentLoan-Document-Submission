@@ -24,6 +24,7 @@ import DocCooldown from "./student/components/DocCooldown";
 import LoanProcessStatus from "./student/LoanProcessStatus";
 import NewsContentScreen from "./student/NewsContent";
 import ChangePassword from "./student/Settings/ChangePassword";
+import ForgotPassword from "./ForgotPassword";
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
@@ -371,6 +372,11 @@ const App = () => {
             name="ChangePassword"
             component={ChangePassword}
             options={{ title: "เปลี่ยนรหัสผ่าน", headerShown: true }}
+          />
+          <Stack.Screen
+            name="ForgotPassword"
+            component={ForgotPassword}
+            options={{ title: "ลืมรหัสผ่าน", headerShown: true }}
           />
         </Stack.Navigator>
       </NavigationContainer>
