@@ -67,8 +67,7 @@ const LoginScreen = ({ navigation }) => {
   };
 
   const handleForgotPassword = () => {
-    // ส่งไปหน้าลืมรหัสผ่าน หรือแสดง Alert
-    Alert.alert("ลืมรหัสผ่าน", "ยังไม่ได้ทำเว้ยค่อยทำๆ");
+    navigation.navigate("ForgotPassword");
   };
 
   return (
