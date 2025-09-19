@@ -49,12 +49,12 @@ const UploadScreen = ({ navigation, route }) => {
   const [surveyDocId, setSurveyDocId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   // Updated: Change uploads structure to support multiple files per document
-  const [uploads, setUploads] = useState({}); // Format: { docId: [file1, file2, ...] }
+  const [uploads, setUploads] = useState({});
   const [uploadProgress, setUploadProgress] = useState({});
   const [showFileModal, setShowFileModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedDocTitle, setSelectedDocTitle] = useState("");
-  const [selectedFileIndex, setSelectedFileIndex] = useState(0); // New: Track which file in array
+  const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [fileContent, setFileContent] = useState(null);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [contentType, setContentType] = useState("");
@@ -780,13 +780,14 @@ const UploadScreen = ({ navigation, route }) => {
       const submissionData = {
         userId: currentUser.uid ?? null,
         userEmail: currentUser.email ?? null,
+        student_id: studentId ?? null,
         surveyData: surveyData ?? null,
         uploads: storageUploads ?? {},
         submittedAt: new Date().toISOString() ?? null,
         status: "submitted" ?? null,
         academicYear: academicYear ?? null,
         term: term ?? null,
-        submissionTerm: `${academicYear}_${term}` ?? null,
+        submissionTerm: `${term}` ?? null,
       };
 
       submissionData.documentStatuses = {};
@@ -812,7 +813,7 @@ const UploadScreen = ({ navigation, route }) => {
         lastSubmissionAt: new Date().toISOString() ?? null,
         hasSubmittedDocuments: true,
         uploads: storageUploads ?? {},
-        lastSubmissionTerm: `${academicYear}_${term}` ?? null,
+        lastSubmissionTerm: `${term}` ?? null,
       });
 
       const totalFiles = Object.values(storageUploads).reduce(
