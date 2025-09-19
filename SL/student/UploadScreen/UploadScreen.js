@@ -350,7 +350,7 @@ const UploadScreen = ({ navigation, route }) => {
     userId,
     studentName,
     config,
-    studentId
+    studentId,
   ) => {
     try {
       const sanitizedStudentName = (studentName ?? 'Unknown_Student')
@@ -711,6 +711,7 @@ const UploadScreen = ({ navigation, route }) => {
 
       let studentId = "Unknown_Student";
       let studentName = "Unknown_Student";
+      let citizenId = "Unknown_CitizenID";
 
       try {
         const userRef = doc(db, "users", currentUser.uid);
@@ -722,6 +723,7 @@ const UploadScreen = ({ navigation, route }) => {
             userData.name ||
             userData.nickname ||
             "Unknown_Student";
+          citizenId = userData.citizen_id;
         }
       } catch (error) {
         console.error("Error fetching user data:", error);
@@ -745,7 +747,7 @@ const UploadScreen = ({ navigation, route }) => {
               currentUser.uid,
               studentName,
               appConfig,
-              studentId
+              studentId,
             );
 
             uploadedFiles.push({
@@ -781,6 +783,7 @@ const UploadScreen = ({ navigation, route }) => {
         userId: currentUser.uid ?? null,
         userEmail: currentUser.email ?? null,
         student_id: studentId ?? null,
+        citizen_id: citizenId ?? null,
         surveyData: surveyData ?? null,
         uploads: storageUploads ?? {},
         submittedAt: new Date().toISOString() ?? null,
