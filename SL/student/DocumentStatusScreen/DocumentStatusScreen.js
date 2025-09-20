@@ -999,10 +999,7 @@ const DocumentStatusScreen = ({ route, navigation }) => {
 
       {/* Action Buttons */}
       <ActionButtons
-        onRefresh={onRefresh}
-        onHome={handleGoHome}
         onDelete={handleDeleteSubmission}
-        refreshing={refreshing}
         disabled={isUploading || Object.keys(storageUploadProgress).length > 0}
       />
     </ScrollView>
