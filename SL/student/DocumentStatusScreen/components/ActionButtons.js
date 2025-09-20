@@ -2,38 +2,12 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'rea
 import { Ionicons } from '@expo/vector-icons';
 
 const ActionButtons = ({ 
-  onRefresh, 
-  onHome, 
   onDelete, 
-  refreshing = false, 
   disabled = false, 
   showDelete = true 
 }) => {
   return (
     <View style={styles.actionButtons}>
-      <TouchableOpacity
-        style={[styles.actionButton, styles.refreshButton, (refreshing || disabled) && styles.disabledButton]}
-        onPress={onRefresh}
-        disabled={refreshing || disabled}
-      >
-        {refreshing ? (
-          <ActivityIndicator size="small" color="#ffffff" />
-        ) : (
-          <Ionicons name="refresh-outline" size={20} color="#ffffff" />
-        )}
-        <Text style={styles.actionButtonText}>
-          {refreshing ? "กำลังโหลด..." : "รีเฟรช"}
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.actionButton, styles.homeButton, disabled && styles.disabledButton]}
-        onPress={onHome}
-        disabled={disabled}
-      >
-        <Ionicons name="home-outline" size={20} color="#ffffff" />
-        <Text style={styles.actionButtonText}>หน้าหลัก</Text>
-      </TouchableOpacity>
 
       {showDelete && (
         <TouchableOpacity
@@ -42,7 +16,7 @@ const ActionButtons = ({
           disabled={disabled}
         >
           <Ionicons name="trash-outline" size={20} color="#ffffff" />
-          <Text style={styles.actionButtonText}>ลบทั้งหมด</Text>
+          <Text style={styles.actionButtonText}>ยกเลิกการส่งเอกสาร</Text>
         </TouchableOpacity>
       )}
     </View>
