@@ -473,10 +473,18 @@ const UploadScreen = ({ navigation, route }) => {
     try {
       const DocumentPicker = await import("expo-document-picker");
       const result = await DocumentPicker.getDocumentAsync({
-        type: "*/*",
-        copyToCacheDirectory: true,
-        multiple: allowMultiple,
-      });
+        type: [
+        "image/*",
+        "image/jpeg",
+        "image/jpg", 
+        "image/png",
+        "image/gif",
+        "image/bmp",
+        "image/webp"
+      ],
+      copyToCacheDirectory: true,
+      multiple: allowMultiple,
+    });
 
       if (result.canceled) return;
 
