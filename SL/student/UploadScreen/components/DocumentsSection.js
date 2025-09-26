@@ -20,27 +20,25 @@ const DocumentsSection = ({
   isValidatingAI = {},
   aiBackendAvailable = false,
   isConvertingToPDF = {},
-  term = '1', // เพิ่ม term prop
+  term = "1", // เพิ่ม term prop
+  volunteerHours = 0,
 }) => {
   // เอกสารที่มี AI validation แตกต่างกันตาม term
   const getAIEnabledDocuments = () => {
-    switch(term) {
-      case '1':
+    switch (term) {
+      case "1":
         return [
           "form_101",
-          "consent_student_form", 
+          "consent_student_form",
           "consent_father_form",
           "consent_mother_form",
           "id_copies_student",
           "id_copies_father",
           "id_copies_mother",
         ];
-      case '2':
-      case '3':
-        return [
-          "borrower_id_card",
-          "guardian_id_card",
-        ];
+      case "2":
+      case "3":
+        return ["borrower_id_card", "guardian_id_card"];
       default:
         return [];
     }
@@ -50,8 +48,8 @@ const DocumentsSection = ({
 
   // เอกสารที่สามารถ generate ได้แตกต่างกันตาม term
   const getGeneratableDocuments = () => {
-    switch(term) {
-      case '1':
+    switch (term) {
+      case "1":
         return [
           "form_101",
           "consent_student_form",
@@ -64,8 +62,8 @@ const DocumentsSection = ({
           "famo_income_cert",
           "family_status_cert",
         ];
-      case '2':
-      case '3':
+      case "2":
+      case "3":
         return []; // เทอม 2/3 ไม่มี template ให้ generate
       default:
         return [];
@@ -147,16 +145,30 @@ const DocumentsSection = ({
 
   const renderFilesList = (doc) => {
     const docFiles = uploads[doc.id] || [];
-    
+
     if (docFiles.length === 0) return null;
+
+    // 🔄 แสดงชั่วโมงรวมสำหรับเอกสารจิตอาสา
+    const showVolunteerHours = doc.id === "volunteer_doc";
+    let totalHours = 0;
+
+    if (showVolunteerHours) {
+      totalHours = docFiles.reduce((sum, file) => sum + (file.hours || 0), 0);
+    }
 
     return (
       <View style={styles.filesContainer}>
         <Text style={styles.filesHeader}>
           ไฟล์ที่อัปโหลด ({docFiles.length} ไฟล์)
         </Text>
-        <ScrollView 
-          horizontal 
+        {showVolunteerHours && totalHours > 0 && (
+          <View style={styles.volunteerHoursBadge}>
+            <Ionicons name="time-outline" size={12} color="#059669" />
+            <Text style={styles.volunteerHoursText}>{totalHours} ชั่วโมง</Text>
+          </View>
+        )}
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.filesScrollView}
         >
@@ -174,20 +186,23 @@ const DocumentsSection = ({
                   />
                 </View>
                 <Text style={styles.fileIndex}>#{index + 1}</Text>
+                {showVolunteerHours && file.hours > 0 && (
+                  <View style={styles.fileHoursBadge}>
+                    <Text style={styles.fileHoursText}>{file.hours}h</Text>
+                  </View>
+                )}
               </TouchableOpacity>
-              
+
               <View style={styles.fileDetails}>
                 <Text style={styles.fileName} numberOfLines={1}>
                   {file.filename}
                 </Text>
-                <Text style={styles.fileSize}>
-                  {formatFileSize(file.size)}
-                </Text>
-                
+                <Text style={styles.fileSize}>{formatFileSize(file.size)}</Text>
+
                 {/* AI validation badges */}
                 {renderAIValidationBadge(doc, file)}
               </View>
-              
+
               <TouchableOpacity
                 style={styles.removeFileButton}
                 onPress={() => onRemoveFile(doc.id, index)}
@@ -203,7 +218,7 @@ const DocumentsSection = ({
 
   const renderAIValidationBadge = (doc, file) => {
     // AI validation badge for different document types based on term
-    if (term === '1') {
+    if (term === "1") {
       // Term 1 AI validation badges
       if (doc.id === "form_101" && file.aiValidated) {
         return (
@@ -215,19 +230,27 @@ const DocumentsSection = ({
       }
 
       if (
-        ["consent_student_form", "consent_father_form", "consent_mother_form"].includes(doc.id) && 
+        [
+          "consent_student_form",
+          "consent_father_form",
+          "consent_mother_form",
+        ].includes(doc.id) &&
         file.aiValidated
       ) {
         return (
           <View style={styles.consentAiValidatedBadge}>
             <Ionicons name="shield-checkmark" size={10} color="#059669" />
-            <Text style={styles.consentAiValidatedText}>ยินยอม AI ตรวจสอบแล้ว</Text>
+            <Text style={styles.consentAiValidatedText}>
+              ยินยอม AI ตรวจสอบแล้ว
+            </Text>
           </View>
         );
       }
 
       if (
-        ["id_copies_student", "id_copies_father", "id_copies_mother"].includes(doc.id) && 
+        ["id_copies_student", "id_copies_father", "id_copies_mother"].includes(
+          doc.id
+        ) &&
         file.aiValidated
       ) {
         return (
@@ -237,10 +260,10 @@ const DocumentsSection = ({
           </View>
         );
       }
-    } else if (term === '2' || term === '3') {
+    } else if (term === "2" || term === "3") {
       // Term 2/3 AI validation badges
       if (
-        ["borrower_id_card", "guardian_id_card"].includes(doc.id) && 
+        ["borrower_id_card", "guardian_id_card"].includes(doc.id) &&
         file.aiValidated
       ) {
         return (
@@ -298,7 +321,10 @@ const DocumentsSection = ({
     const type = mimeType?.toLowerCase() || "";
     const name = filename?.toLowerCase() || "";
 
-    if (type.startsWith("image/") || name.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/)) {
+    if (
+      type.startsWith("image/") ||
+      name.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/)
+    ) {
       return "image";
     } else if (type.includes("pdf") || name.endsWith(".pdf")) {
       return "document-text";
@@ -316,7 +342,7 @@ const DocumentsSection = ({
   const getAIBadgeForDocument = (docId) => {
     if (AI_ENABLED_DOCUMENTS.includes(docId)) {
       // Different AI badge styles for different document types
-      if (term === '1') {
+      if (term === "1") {
         if (docId === "form_101") {
           return (
             <View style={styles.aiBadge}>
@@ -326,29 +352,51 @@ const DocumentsSection = ({
           );
         }
 
-        if (["consent_student_form", "consent_father_form", "consent_mother_form"].includes(docId)) {
+        if (
+          [
+            "consent_student_form",
+            "consent_father_form",
+            "consent_mother_form",
+          ].includes(docId)
+        ) {
           return (
             <View style={[styles.aiBadge, styles.consentAiBadge]}>
-              <Ionicons name="shield-checkmark-outline" size={12} color="#059669" />
-              <Text style={[styles.aiBadgeText, styles.consentAiBadgeText]}>ยินยอม AI</Text>
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={12}
+                color="#059669"
+              />
+              <Text style={[styles.aiBadgeText, styles.consentAiBadgeText]}>
+                ยินยอม AI
+              </Text>
             </View>
           );
         }
 
-        if (["id_copies_student", "id_copies_father", "id_copies_mother"].includes(docId)) {
+        if (
+          [
+            "id_copies_student",
+            "id_copies_father",
+            "id_copies_mother",
+          ].includes(docId)
+        ) {
           return (
             <View style={[styles.aiBadge, styles.idAiBadge]}>
               <Ionicons name="card-outline" size={12} color="#dc2626" />
-              <Text style={[styles.aiBadgeText, styles.idAiBadgeText]}>บัตร AI</Text>
+              <Text style={[styles.aiBadgeText, styles.idAiBadgeText]}>
+                บัตร AI
+              </Text>
             </View>
           );
         }
-      } else if (term === '2' || term === '3') {
+      } else if (term === "2" || term === "3") {
         if (["borrower_id_card", "guardian_id_card"].includes(docId)) {
           return (
             <View style={[styles.aiBadge, styles.idAiBadge]}>
               <Ionicons name="card-outline" size={12} color="#dc2626" />
-              <Text style={[styles.aiBadgeText, styles.idAiBadgeText]}>บัตร AI</Text>
+              <Text style={[styles.aiBadgeText, styles.idAiBadgeText]}>
+                บัตร AI
+              </Text>
             </View>
           );
         }
@@ -361,22 +409,32 @@ const DocumentsSection = ({
   const renderAIUnavailableWarning = (doc) => {
     if (!AI_ENABLED_DOCUMENTS.includes(doc.id)) return null;
     if (aiBackendAvailable) return null;
-    
+
     const docFiles = uploads[doc.id] || [];
     if (docFiles.length === 0) return null;
 
     let warningText = "AI ไม่พร้อมใช้งาน";
-    
+
     // Different warning messages based on document type and term
-    if (term === '1') {
+    if (term === "1") {
       if (doc.id === "form_101") {
         warningText = "AI ตรวจสอบฟอร์มไม่พร้อมใช้งาน";
-      } else if (["consent_student_form", "consent_father_form", "consent_mother_form"].includes(doc.id)) {
+      } else if (
+        [
+          "consent_student_form",
+          "consent_father_form",
+          "consent_mother_form",
+        ].includes(doc.id)
+      ) {
         warningText = "AI ตรวจสอบยินยอมไม่พร้อมใช้งาน";
-      } else if (["id_copies_student", "id_copies_father", "id_copies_mother"].includes(doc.id)) {
+      } else if (
+        ["id_copies_student", "id_copies_father", "id_copies_mother"].includes(
+          doc.id
+        )
+      ) {
         warningText = "AI ตรวจสอบบัตรประชาชนไม่พร้อมใช้งาน";
       }
-    } else if (term === '2' || term === '3') {
+    } else if (term === "2" || term === "3") {
       if (["borrower_id_card", "guardian_id_card"].includes(doc.id)) {
         warningText = "AI ตรวจสอบบัตรประชาชนไม่พร้อมใช้งาน";
       }
@@ -391,11 +449,15 @@ const DocumentsSection = ({
   };
 
   const getSectionTitle = () => {
-    switch(term) {
-      case '1': return 'รายการเอกสารสำหรับการสมัคร';
-      case '2': return 'รายการเอกสารสำหรับการเบิกเงินกู้ยืม เทอม 2';
-      case '3': return 'รายการเอกสารสำหรับการเบิกเงินกู้ยืม เทอม 3';
-      default: return 'รายการเอกสาร';
+    switch (term) {
+      case "1":
+        return "รายการเอกสารสำหรับการสมัคร";
+      case "2":
+        return "รายการเอกสารสำหรับการเบิกเงินกู้ยืม เทอม 2";
+      case "3":
+        return "รายการเอกสารสำหรับการเบิกเงินกู้ยืม เทอม 3";
+      default:
+        return "รายการเอกสาร";
     }
   };
 
@@ -475,6 +537,17 @@ const DocumentsSection = ({
 };
 
 const styles = StyleSheet.create({
+  volunteerStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  volunteerHours: {
+    marginLeft: 6,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#ef4444",
+  },
   documentsSection: {
     backgroundColor: "#fff",
     padding: 16,
@@ -845,6 +918,42 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginLeft: 4,
     color: "inherit",
+  },
+  filesHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  volunteerHoursBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#d1fae5",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#059669",
+  },
+  volunteerHoursText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#059669",
+    marginLeft: 4,
+  },
+  fileHoursBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    backgroundColor: "#10b981",
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  fileHoursText: {
+    fontSize: 10,
+    fontWeight: "bold",
+    color: "white",
   },
 });
 
