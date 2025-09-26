@@ -25,6 +25,7 @@ import LoanProcessStatus from "./student/LoanProcessStatus";
 import NewsContentScreen from "./student/NewsContent";
 import ChangePassword from "./student/Settings/ChangePassword";
 import ForgotPassword from "./ForgotPassword";
+import LoanRequestUpload from "./student/term2/Upload/LoanRequestUpload";
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
@@ -45,69 +46,131 @@ const HomeStack = () => (
 );
 
 // Component to check document approval status and render appropriate screen
+// Component to check document approval status and render appropriate screen
 const DocumentManagement = () => {
   const [allDocsApproved, setAllDocsApproved] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
+  const [currentConfig, setCurrentConfig] = useState(null); // เก็บ config ปัจจุบัน
 
   useEffect(() => {
     const user = auth.currentUser;
     if (user) {
       setCurrentUser(user);
-      checkDocumentApprovalStatus(user.uid);
+      
+      // Listen to config changes
+      const configRef = doc(db, "DocumentService", "config");
+      const configUnsubscribe = onSnapshot(configRef, (configDoc) => {
+        if (configDoc.exists()) {
+          const newConfig = configDoc.data();
+          
+          // ถ้า config เปลี่ยน (เทอมหรือปีการศึกษา)
+          if (currentConfig && 
+              (currentConfig.term !== newConfig.term || 
+               currentConfig.academicYear !== newConfig.academicYear)) {
+            
+            console.log(`🔄 Config changed - Term: ${currentConfig.term} -> ${newConfig.term}, Year: ${currentConfig.academicYear} -> ${newConfig.academicYear}`);
+            
+            // Reset states ทันที
+            setAllDocsApproved(false);
+            setIsCheckingStatus(true);
+            
+            console.log(`🔄 Reset allDocsApproved to false due to config change`);
+          }
+          
+          setCurrentConfig(newConfig);
+        }
+      });
+
+      return () => {
+        configUnsubscribe();
+      };
     } else {
       setIsCheckingStatus(false);
     }
-  }, []);
+  }, []); // ไม่ต้องใส่ currentConfig ใน dependency
 
-  const checkDocumentApprovalStatus = async (userId) => {
+  // useEffect แยกสำหรับเช็คสถานะเอกสาร
+  useEffect(() => {
+    if (currentUser && currentConfig) {
+      console.log(`📋 Checking document status for user ${currentUser.uid}, term ${currentConfig.term}, year ${currentConfig.academicYear}`);
+      checkDocumentApprovalStatus(currentUser.uid, currentConfig.academicYear, currentConfig.term);
+    }
+  }, [currentUser, currentConfig]); // จะทำงานใหม่เมื่อ config เปลี่ยน
+
+  const checkDocumentApprovalStatus = async (userId, academicYear, term) => {
     try {
-      // Get app config to determine current term
-      const configRef = doc(db, "DocumentService", "config");
-      const configDoc = await getDoc(configRef);
-      let collectionName = "document_submissions";
+      setIsCheckingStatus(true);
+      
+      const termId = `${academicYear}_${term}`;
+      const collectionName = `document_submissions_${termId}`;
 
-      if (configDoc.exists()) {
-        const config = configDoc.data();
-        const termId = `${config.academicYear}_${config.term}`;
-        collectionName = `document_submissions_${termId}`;
-      }
+      console.log(`🔍 Checking submissions in: ${collectionName} for user: ${userId}`);
 
-      // Set up real-time listener for user's document submissions
+      // Set up listener สำหรับเทอมปัจจุบัน
       const userDocRef = doc(db, collectionName, userId);
       const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+        console.log(`📄 Document snapshot received for ${collectionName}`);
+        
         if (docSnap.exists()) {
           const submissionData = docSnap.data();
           const isAllApproved = checkIfAllDocumentsApproved(submissionData);
+          
+          console.log(`✅ Document data exists. All approved: ${isAllApproved}`);
+          console.log(`📊 Submission data:`, submissionData.documentStatuses);
+          
           setAllDocsApproved(isAllApproved);
         } else {
+          console.log(`❌ No document submission found for ${collectionName}`);
           setAllDocsApproved(false);
         }
         setIsCheckingStatus(false);
+      }, (error) => {
+        console.error("❌ Error listening to document status:", error);
+        setAllDocsApproved(false);
+        setIsCheckingStatus(false);
       });
 
+      // Return unsubscribe function สำหรับ cleanup
       return unsubscribe;
+
     } catch (error) {
-      console.error("Error checking document approval status:", error);
+      console.error("❌ Error in checkDocumentApprovalStatus:", error);
       setAllDocsApproved(false);
       setIsCheckingStatus(false);
     }
   };
 
   const checkIfAllDocumentsApproved = (submissionData) => {
-    if (!submissionData) return false;
+    if (!submissionData) {
+      console.log("❌ No submission data");
+      return false;
+    }
 
     // Check using new documentStatuses structure
     if (submissionData.documentStatuses) {
       const statuses = Object.values(submissionData.documentStatuses);
-      if (statuses.length === 0) return false;
+      console.log(`📋 Document statuses found: ${statuses.length} documents`);
+      
+      if (statuses.length === 0) {
+        console.log("❌ No documents in documentStatuses");
+        return false;
+      }
 
-      // All documents must be approved
-      return statuses.every((doc) => doc.status === "approved");
+      const allApproved = statuses.every((doc) => doc.status === "approved");
+      console.log(`✅ All documents approved: ${allApproved}`);
+      
+      // Log individual document statuses
+      statuses.forEach((doc, index) => {
+        console.log(`📄 Document ${index}: ${doc.status}`);
+      });
+      
+      return allApproved;
     }
 
-    // Fallback to old structure for backward compatibility
+    // Fallback to old structure
     if (submissionData.uploads) {
+      console.log("📋 Using legacy uploads structure");
       const uploads = Object.values(submissionData.uploads);
       if (uploads.length === 0) return false;
 
@@ -117,19 +180,25 @@ const DocumentManagement = () => {
       });
     }
 
+    console.log("❌ No valid document structure found");
     return false;
   };
 
+  // Debug logging
+  console.log(`🔍 DocumentManagement render - isCheckingStatus: ${isCheckingStatus}, allDocsApproved: ${allDocsApproved}`);
+  console.log(`📋 Current config:`, currentConfig);
+
   if (isCheckingStatus) {
+    console.log("⏳ Showing loading screen");
     return <LoadingScreen />;
   }
 
-  // If all documents are approved, show loan process status
   if (allDocsApproved) {
+    console.log("✅ All documents approved - showing LoanProcessStatus");
     return <LoanProcessStatus />;
   }
 
-  // Otherwise, show document status screen
+  console.log("📄 Documents not all approved - showing DocumentStatusScreen");
   return <DocumentStatusScreen />;
 };
 
@@ -137,6 +206,7 @@ const UploadStack = () => {
   const [isEnabled, setIsEnabled] = useState(null);
   const [hasSubmittedDocs, setHasSubmittedDocs] = useState(false);
   const [isCheckingSubmission, setIsCheckingSubmission] = useState(true);
+  const [currentConfig, setCurrentConfig] = useState(null);
 
   useEffect(() => {
     // Listen for changes in Firestore config
@@ -144,43 +214,95 @@ const UploadStack = () => {
 
     const configUnsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
-        const config = docSnap.data();
-        // Check immediateAccess and isEnabled values
-        setIsEnabled(config.immediateAccess || config.isEnabled);
+        const newConfig = docSnap.data();
+        
+        console.log("🔧 Config update received:", newConfig);
+        
+        // ถ้า config เปลี่ยน (เทอมหรือปีการศึกษา)
+        if (currentConfig && 
+            (currentConfig.term !== newConfig.term || 
+             currentConfig.academicYear !== newConfig.academicYear)) {
+          
+          console.log(`🔄 Config changed in UploadStack - Term: ${currentConfig.term} -> ${newConfig.term}, Year: ${currentConfig.academicYear} -> ${newConfig.academicYear}`);
+          
+          // Reset submission status ทันที
+          setHasSubmittedDocs(false);
+          setIsCheckingSubmission(true);
+          
+          console.log("🔄 Reset hasSubmittedDocs to false in UploadStack");
+        }
+        
+        setCurrentConfig(newConfig);
+        setIsEnabled(newConfig.immediateAccess || newConfig.isEnabled);
+        
       } else {
         setIsEnabled(false);
+        setIsCheckingSubmission(false);
       }
     });
 
-    // Check if user has submitted documents
-    const checkUserSubmission = () => {
-      const user = auth.currentUser;
-      if (user) {
-        const userRef = doc(db, "users", user.uid);
-        const userUnsubscribe = onSnapshot(userRef, (userDoc) => {
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setHasSubmittedDocs(userData.hasSubmittedDocuments || false);
-          }
-          setIsCheckingSubmission(false);
-        });
-        return userUnsubscribe;
-      } else {
-        setIsCheckingSubmission(false);
-        return null;
-      }
-    };
-
-    const userUnsubscribe = checkUserSubmission();
-
     return () => {
       configUnsubscribe();
-      if (userUnsubscribe) userUnsubscribe();
     };
-  }, []);
+  }, []); // ไม่ใส่ currentConfig ใน dependencies
+
+  // useEffect แยกสำหรับเช็คสถานะ submission
+  useEffect(() => {
+    if (currentConfig) {
+      console.log(`🔍 Checking submission status for config:`, currentConfig);
+      checkUserSubmissionForTerm(currentConfig.academicYear, currentConfig.term);
+    }
+  }, [currentConfig]); // จะทำงานใหม่เมื่อ config เปลี่ยน
+
+  const checkUserSubmissionForTerm = async (academicYear, term) => {
+    const user = auth.currentUser;
+    if (!user) {
+      console.log("❌ No current user");
+      setIsCheckingSubmission(false);
+      return;
+    }
+
+    try {
+      setIsCheckingSubmission(true);
+      
+      const termId = `${academicYear}_${term}`;
+      const collectionName = `document_submissions_${termId}`;
+      const submissionRef = doc(db, collectionName, user.uid);
+      
+      console.log(`🔍 Checking submission in: ${collectionName} for user: ${user.uid}`);
+      
+      const submissionUnsubscribe = onSnapshot(submissionRef, (submissionDoc) => {
+        const hasSubmitted = submissionDoc.exists();
+        
+        console.log(`📄 Submission check result for ${collectionName}: ${hasSubmitted}`);
+        
+        if (submissionDoc.exists()) {
+          console.log("📊 Submission data:", submissionDoc.data());
+        }
+        
+        setHasSubmittedDocs(hasSubmitted);
+        setIsCheckingSubmission(false);
+      }, (error) => {
+        console.error("❌ Error checking submission:", error);
+        setHasSubmittedDocs(false);
+        setIsCheckingSubmission(false);
+      });
+
+      return submissionUnsubscribe;
+    } catch (error) {
+      console.error("❌ Error in checkUserSubmissionForTerm:", error);
+      setHasSubmittedDocs(false);
+      setIsCheckingSubmission(false);
+    }
+  };
+
+  // Debug logging
+  console.log(`🔍 UploadStack render - isEnabled: ${isEnabled}, hasSubmittedDocs: ${hasSubmittedDocs}, isCheckingSubmission: ${isCheckingSubmission}`);
+  console.log(`📋 Current config in UploadStack:`, currentConfig);
 
   // Show loading screen while fetching data
   if (isEnabled === null || isCheckingSubmission) {
+    console.log("⏳ UploadStack showing loading screen");
     return (
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Loading" component={LoadingScreen} />
@@ -188,18 +310,21 @@ const UploadStack = () => {
     );
   }
 
+  let targetComponent;
+  if (hasSubmittedDocs) {
+    console.log("📄 Has submitted docs - showing DocumentManagement");
+    targetComponent = DocumentManagement;
+  } else if (isEnabled) {
+    console.log("✅ Upload enabled - showing UploadScreen");
+    targetComponent = UploadScreen;
+  } else {
+    console.log("🚫 Upload disabled - showing DocCooldown");
+    targetComponent = DocCooldown;
+  }
+
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen
-        name="UploadMain"
-        component={
-          hasSubmittedDocs
-            ? DocumentManagement
-            : isEnabled
-            ? UploadScreen
-            : DocCooldown
-        }
-      />
+      <Stack.Screen name="UploadMain" component={targetComponent} />
       <Stack.Screen
         name="DocumentStatusScreen"
         component={DocumentStatusScreen}
