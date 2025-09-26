@@ -18,9 +18,9 @@ import {
 import { storage } from "../../database/firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 // Import for PDF creation
-import * as Print from 'expo-print';
-import * as FileSystem from 'expo-file-system/legacy';
-import { mergeImagesToPdf } from './utils/pdfMerger';
+import * as Print from "expo-print";
+import * as FileSystem from "expo-file-system/legacy";
+import { mergeImagesToPdf } from "./utils/pdfMerger";
 
 // Import refactored AI validation modules
 import {
@@ -50,6 +50,7 @@ const UploadScreen = ({ navigation, route }) => {
   const [isLoading, setIsLoading] = useState(true);
   // Updated: Change uploads structure to support multiple files per document
   const [uploads, setUploads] = useState({});
+  const [volunteerHours, setVolunteerHours] = useState(0);
   const [uploadProgress, setUploadProgress] = useState({});
   const [showFileModal, setShowFileModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -75,6 +76,15 @@ const UploadScreen = ({ navigation, route }) => {
   const [document, setDocuments] = useState([]);
   const [userAge, setUserAge] = useState(null); // เพิ่มสำหรับเก็บอายุที่คำนวณได้
 
+  //ฟังก์ชันคำนวณชั่วโมงเมื่อโหลดข้อมูลครั้งแรก
+  useEffect(() => {
+    if (uploads.volunteer_doc) {
+      const initialHours = calculateVolunteerHoursFromUploads(uploads);
+      setVolunteerHours(initialHours);
+      console.log(`🔄 Initial volunteer hours calculated: ${initialHours}`);
+    }
+  }, [uploads.volunteer_doc]);
+
   // Check AI backend status on component mount - UPDATED to use unified AI system
   useEffect(() => {
     const checkAIStatus = async () => {
@@ -91,30 +101,34 @@ const UploadScreen = ({ navigation, route }) => {
   // 1. Config Listener (Term และ Academic Year)
   // -----------------------------------------------------
   useEffect(() => {
-      const configRef = doc(db, "DocumentService", "config");
-      
-      const configUnsubscribe = onSnapshot(configRef, (docSnap) => {
-          if (docSnap.exists()) {
-              const config = docSnap.data();
-              if (config) {
-                setAppConfig(config);
-                setAcademicYear(config.academicYear);
-                setTerm(config.term);
-              } else {
-                console.warn("ไม่พบ config document");
-              }
-          } else {
-              // ใช้ค่า Default หาก config document ไม่มี
-              const defaultConfig = { academicYear: "2567", term: "1" };
-              setAppConfig(defaultConfig);
-              setAcademicYear(defaultConfig.academicYear);
-              setTerm(defaultConfig.term);
-          }
-      }, (error) => {
-          console.error("Error listening to app config:", error);
-      });
+    const configRef = doc(db, "DocumentService", "config");
 
-      return () => configUnsubscribe();
+    const configUnsubscribe = onSnapshot(
+      configRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const config = docSnap.data();
+          if (config) {
+            setAppConfig(config);
+            setAcademicYear(config.academicYear);
+            setTerm(config.term);
+          } else {
+            console.warn("ไม่พบ config document");
+          }
+        } else {
+          // ใช้ค่า Default หาก config document ไม่มี
+          const defaultConfig = { academicYear: "2567", term: "1" };
+          setAppConfig(defaultConfig);
+          setAcademicYear(defaultConfig.academicYear);
+          setTerm(defaultConfig.term);
+        }
+      },
+      (error) => {
+        console.error("Error listening to app config:", error);
+      }
+    );
+
+    return () => configUnsubscribe();
   }, []); // เรียกใช้ครั้งเดียวเมื่อ Component Mount
 
   // -----------------------------------------------------
@@ -132,23 +146,29 @@ const UploadScreen = ({ navigation, route }) => {
       // ***** แก้ไขส่วนที่ 1: ดึง Config อย่างปลอดภัย *****
       let currentConfig = appConfig;
       if (!currentConfig) {
-          const configDoc = await getDoc(doc(db, "DocumentService", "config"));
-          currentConfig = (configDoc && configDoc.exists()) 
-              ? configDoc.data() 
-              : { academicYear: "2567", term: "1" };
+        const configDoc = await getDoc(doc(db, "DocumentService", "config"));
+        currentConfig =
+          configDoc && configDoc.exists()
+            ? configDoc.data()
+            : { academicYear: "2567", term: "1" };
       }
-      
+
       // ***** ตรวจสอบ Submission status สำหรับ term ปัจจุบัน *****
-      const termCollectionName = `document_submissions_
-      ${currentConfig.academicYear}_${currentConfig.term}`;
-      
-      console.log(`🔍 Checking submission for collection: ${termCollectionName}`);
-      
+      const termCollectionName = `document_submissions_${
+        currentConfig.academicYear || "2567"
+      }_${currentConfig.term || "1"}`;
+
+      console.log(
+        `🔍 Checking submission for collection: ${termCollectionName}`
+      );
+
       const submissionRef = doc(db, termCollectionName, currentUser.uid);
       const submissionDoc = await getDoc(submissionRef);
-      
+
       if (submissionDoc.exists()) {
-        console.log("✅ Found existing submission, redirecting to status screen");
+        console.log(
+          "✅ Found existing submission, redirecting to status screen"
+        );
         navigation.replace("DocumentStatusScreen", {
           submissionData: submissionDoc.data(),
         });
@@ -164,24 +184,23 @@ const UploadScreen = ({ navigation, route }) => {
 
       if (userSurveyDoc.exists()) {
         const userData = userSurveyDoc.data();
-        const surveyData = userData.survey;
-        setSurveyData(surveyData);
-        setSurveyDocId(userSurveyDoc.id);
-        
+
         // ***** สำหรับเทอม 2/3: ไม่จำเป็นต้องมี survey data *****
-        if (currentConfig.term === '2' || currentConfig.term === '3') {
-          console.log(`🎓 Term ${currentConfig.term}: Setting up without survey requirement`);
-          
+        if (currentConfig.term === "2" || currentConfig.term === "3") {
+          console.log(
+            `🎓 Term ${currentConfig.term}: Setting up without survey requirement`
+          );
+
           // ใช้ข้อมูล birth_date จาก user document
           const birthDateFromUser = userData.birth_date;
           setBirthDate(birthDateFromUser);
-          
+
           if (birthDateFromUser) {
             const age = calculateAge(birthDateFromUser);
             setUserAge(age);
             console.log(`👤 User age calculated: ${age} years`);
           }
-          
+
           // สำหรับเทอม 2/3 ไม่ต้องมี survey data
           setSurveyData({ term: currentConfig.term });
           setSurveyDocId(userSurveyDoc.id);
@@ -189,13 +208,13 @@ const UploadScreen = ({ navigation, route }) => {
           // ***** สำหรับเทอม 1: ต้องมี survey data *****
           const surveyData = userData.survey;
           if (surveyData) {
-            setSurveyData(surveyData);
+            setSurveyData({ ...surveyData, term: currentConfig.term });
             setSurveyDocId(userSurveyDoc.id);
-            
+
             // ดึง birth_date จาก survey หรือ user data
             const birthDateData = userData.birth_date;
             setBirthDate(birthDateData);
-            
+
             if (birthDateData) {
               const age = calculateAge(birthDateData);
               setUserAge(age);
@@ -212,7 +231,7 @@ const UploadScreen = ({ navigation, route }) => {
         if (userData.uploads) {
           // Convert old format to new format if needed
           const convertedUploads = {};
-          Object.keys(userData.uploads).forEach(docId => {
+          Object.keys(userData.uploads).forEach((docId) => {
             const upload = userData.uploads[docId];
             if (Array.isArray(upload)) {
               convertedUploads[docId] = upload;
@@ -225,8 +244,10 @@ const UploadScreen = ({ navigation, route }) => {
         }
       } else {
         // ไม่พบข้อมูล user
-        if (currentConfig.term === '2' || currentConfig.term === '3') {
-          console.log(`🎓 Term ${currentConfig.term}: Creating minimal data without survey requirement`);
+        if (currentConfig.term === "2" || currentConfig.term === "3") {
+          console.log(
+            `🎓 Term ${currentConfig.term}: Creating minimal data without survey requirement`
+          );
           // สำหรับเทอม 2/3 ไม่จำเป็นต้องมี survey data
           setSurveyData({ term: currentConfig.term });
           setSurveyDocId(null);
@@ -241,63 +262,42 @@ const UploadScreen = ({ navigation, route }) => {
 
     // เรียกใช้เมื่อ appConfig ถูกโหลดแล้ว
     if (appConfig) {
-        checkSubmissionStatus();
+      checkSubmissionStatus();
     }
-    
-  }, [appConfig]); 
+  }, [appConfig]);
 
   // -----------------------------------------------------
   // 3. Document List Generator (สร้างรายการเอกสาร)
   // -----------------------------------------------------
   useEffect(() => {
-  // ตัวแปรสำหรับตรวจสอบความพร้อมของข้อมูล
-  let isDataReady = false;
-  let requiredData = {};
-
-  if (term === '1') {
-    // สำหรับเทอม 1: ต้องมี surveyData, academicYear, และ birthDate
-    if (surveyData && academicYear && birthDate) {
-      isDataReady = true;
-      requiredData = {
-        ...surveyData,
+    // สำหรับเทอม 2/3: ใช้ birthDate และ term ในการสร้างรายการ
+    if (term === "2" || term === "3") {
+      console.log(`🎓 Generating documents for Term ${term}`);
+      const docs = generateDocumentsList({
         term: term,
         academicYear: academicYear,
         birth_date: birthDate,
-      };
-    } else if (!surveyData) {
-      // Log นี้จำเป็นต้องมีอยู่ แต่เราจะเพิ่มเงื่อนไขให้ชัดเจนขึ้น
-      console.log("❌ Term 1 without survey data - clearing document list (Waiting for data...)");
-      setDocuments([]); // เคลียร์เอกสารจนกว่าข้อมูลจะพร้อม
+      });
+      setDocuments(docs);
+      console.log(`📋 Generated ${docs.length} documents for Term ${term}`);
     }
-  } else if (term === '2' || term === '3') {
-    // สำหรับเทอม 2/3: ต้องมี academicYear และ birthDate
-    if (academicYear && birthDate) {
-      isDataReady = true;
-      requiredData = {
+    // สำหรับเทอม 1: ต้องมีข้อมูลที่จำเป็นครบถ้วน
+    else if (surveyData && term && academicYear && birthDate) {
+      console.log(`🎓 Generating documents for Term ${term}`);
+      const docs = generateDocumentsList({
+        ...surveyData, // ส่ง surveyData เดิม (familyStatus, incomes)
         term: term,
         academicYear: academicYear,
-        birth_date: birthDate,
-        surveyData: surveyData || null, // surveyData อาจจะไม่มี
-      };
+        birth_date: birthDate, // ส่ง birth date (Timestamp) เพื่อคำนวดอายุ
+      });
+      setDocuments(docs);
+      console.log(`📋 Generated ${docs.length} documents for Term ${term}`);
+    } else if (!surveyData && term === "1") {
+      // หาก term 1 แต่ยังไม่มี surveyData ให้เคลียร์รายการเอกสาร
+      console.log("❌ Term 1 without survey data - clearing document list");
+      setDocuments([]);
     }
-  }
-  
-  // *** จุดที่ป้องกันการทำงานซ้ำ: Logic จะทำงานเมื่อ isDataReady เป็น true เท่านั้น ***
-  if (isDataReady) {
-    console.log(`🎓 Generating documents for Term ${term} (Final Data Ready)`);
-    
-    // เรียกใช้ฟังก์ชัน generateDocumentsList/getRequiredDocuments ด้วยข้อมูลที่เตรียมไว้
-    // (ใช้ชื่อฟังก์ชันที่คุณใช้อยู่เดิม เช่น generateDocumentsList)
-    const docs = generateDocumentsList(requiredData); 
-    
-    setDocuments(docs);
-    console.log(`📋 Generated ${docs.length} documents for Term ${term}`);
-    
-    // *** สำคัญ: ควรเรียก initializeUploads ที่นี่เพื่อให้แน่ใจว่าทำงานเมื่อเอกสารถูกกำหนดแล้ว ***
-    // initializeUploads(docs); 
-  }
-
-}, [surveyData, term, academicYear, birthDate]); // Dependency Array
+  }, [surveyData, term, academicYear, birthDate]); // เรียกใช้เมื่อข้อมูลเหล่านี้มีการเปลี่ยนแปลง
 
   // Save uploads to Firebase
   const saveUploadsToFirebase = async (uploadsData) => {
@@ -316,17 +316,30 @@ const UploadScreen = ({ navigation, route }) => {
   };
 
   const isImageFile = (mimeType, filename) => {
-    const imageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp', 'image/webp'];
-    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
-    
-    if (mimeType && imageTypes.some(type => mimeType.toLowerCase().includes(type))) {
+    const imageTypes = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/gif",
+      "image/bmp",
+      "image/webp",
+    ];
+    const imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"];
+
+    if (
+      mimeType &&
+      imageTypes.some((type) => mimeType.toLowerCase().includes(type))
+    ) {
       return true;
     }
-    
-    if (filename && imageExtensions.some(ext => filename.toLowerCase().endsWith(ext))) {
+
+    if (
+      filename &&
+      imageExtensions.some((ext) => filename.toLowerCase().endsWith(ext))
+    ) {
       return true;
     }
-    
+
     return false;
   };
 
@@ -342,7 +355,7 @@ const UploadScreen = ({ navigation, route }) => {
         encoding: FileSystem.EncodingType.Base64,
       });
 
-      const mimeType = imageFile.mimeType || 'image/jpeg';
+      const mimeType = imageFile.mimeType || "image/jpeg";
       const base64DataUri = `data:${mimeType};base64,${base64Image}`;
 
       const htmlContent = `
@@ -383,13 +396,13 @@ const UploadScreen = ({ navigation, route }) => {
       });
 
       const pdfInfo = await FileSystem.getInfoAsync(pdfUri);
-      const originalName = imageFile.filename || imageFile.name || 'image';
+      const originalName = imageFile.filename || imageFile.name || "image";
       const nameWithoutExtension = originalName.replace(/\.[^/.]+$/, "");
 
       const pdfFile = {
         filename: `${docId}.pdf`,
         uri: pdfUri,
-        mimeType: 'application/pdf',
+        mimeType: "application/pdf",
         size: pdfInfo.size,
         uploadDate: new Date().toLocaleString("th-TH"),
         status: "pending",
@@ -413,6 +426,19 @@ const UploadScreen = ({ navigation, route }) => {
     }
   };
 
+  const calculateVolunteerHoursFromUploads = (uploadsData) => {
+    let totalHours = 0;
+    const volunteerFiles = uploadsData.volunteer_doc || [];
+
+    volunteerFiles.forEach((file) => {
+      if (file.hours) {
+        totalHours += file.hours;
+      }
+    });
+
+    return totalHours;
+  };
+
   // UPDATED: AI validation function to use unified AI system
   const performAIValidation = async (file, docId) => {
     if (!aiBackendAvailable) {
@@ -421,10 +447,9 @@ const UploadScreen = ({ navigation, route }) => {
         "ไม่สามารถตรวจสอบเอกสารด้วย AI ได้ในขณะนี้ คุณสามารถดำเนินการต่อได้",
         [{ text: "ตกลง" }]
       );
-      return true; // Allow to continue if AI is not available
+      return true; // อนุญาตให้อัพโหลดต่อเมื่อ AI ไม่พร้อม
     }
 
-    // Check if this document type needs AI validation
     if (!needsAIValidation(docId)) {
       console.log(`Document ${docId} does not need AI validation`);
       return true;
@@ -434,20 +459,77 @@ const UploadScreen = ({ navigation, route }) => {
 
     try {
       console.log(`🤖 Starting AI validation for ${docId}`);
-      
-      // Use the unified validation function
-      const validationResult = await validateDocument(file.uri, docId, null, file.mimeType);
 
+      const validationResult = await validateDocument(
+        file.uri,
+        docId,
+        null,
+        file.mimeType
+      );
+
+      // --- แก้ไขส่วนนี้ ---
+      if (docId === "volunteer_doc") {
+        const hours = validationResult.accumulatedHours || 0;
+        console.log(`📊 Extracted volunteer hours: ${hours}`);
+
+        // อัพเดตชั่วโมงจิตอาสา
+        setVolunteerHours((prev) => {
+          const newTotal = prev + hours;
+          console.log(
+            `🔄 Updating volunteer hours from ${prev} to ${newTotal}`
+          );
+          if (newTotal >= 36) {
+            Alert.alert(
+              "ครบชั่วโมงจิตอาสาแล้ว",
+              `คุณสะสมครบ ${newTotal} ชั่วโมง`
+            );
+          }
+          return newTotal;
+        });
+
+        // สำหรับ volunteer_doc ให้แสดง alert พิเศษ
+        return new Promise((resolve) => {
+          Alert.alert(
+            "ตรวจสอบชั่วโมงจิตอาสา",
+            `AI ตรวจพบ ${hours} ชั่วโมงจิตอาสาในเอกสารนี้\nชั่วโมงรวมปัจจุบัน: ${
+              volunteerHours + hours
+            } ชั่วโมง`,
+            [
+              {
+                text: "ยกเลิก",
+                style: "cancel",
+                onPress: () => {
+                  console.log("✗ User cancelled volunteer document");
+                  resolve(false);
+                },
+              },
+              {
+                text: "ใช้ไฟล์นี้",
+                onPress: () => {
+                  console.log("✓ User accepted volunteer document");
+                  resolve(true);
+                },
+              },
+            ]
+          );
+        });
+      }
+
+      // สำหรับ document อื่นๆ ใช้การแจ้งเตือนปกติ
       return new Promise((resolve) => {
         showValidationAlert(
           validationResult,
           docId,
           () => {
-            console.log(`✓ AI Validation passed for ${file.filename} (${docId})`);
+            console.log(
+              `✓ AI Validation passed for ${file.filename} (${docId})`
+            );
             resolve(true);
           },
           () => {
-            console.log(`✗ AI Validation failed for ${file.filename} (${docId})`);
+            console.log(
+              `✗ AI Validation failed for ${file.filename} (${docId})`
+            );
             resolve(false);
           }
         );
@@ -481,26 +563,28 @@ const UploadScreen = ({ navigation, route }) => {
     userId,
     studentName,
     config,
-    studentId,
+    studentId
   ) => {
     try {
-      const sanitizedStudentName = (studentName ?? 'Unknown_Student')
+      const sanitizedStudentName = (studentName ?? "Unknown_Student")
         .replace(/[.#$[\]/\\]/g, "_")
         .replace(/\s+/g, "_");
-      
+
       // Use PDF extension for converted files, or original extension
-      const fileExtension = file.convertedFromImage ? 'pdf' : (file.filename?.split(".").pop() || 'unknown');
-      
+      const fileExtension = file.convertedFromImage
+        ? "pdf"
+        : file.filename?.split(".").pop() || "unknown";
+
       const academicYear = config?.academicYear || "2568";
       const term = config?.term || "1";
       const storagePath = `student_documents/${sanitizedStudentName}/${academicYear}/term_${term}/${studentId}_${docId}.${fileExtension}`;
-      
+
       const response = await fetch(file.uri);
       const blob = await response.blob();
-      
+
       const storageRef = ref(storage, storagePath);
       const uploadTask = uploadBytesResumable(storageRef, blob);
-      
+
       return new Promise((resolve, reject) => {
         uploadTask.on(
           "state_changed",
@@ -524,7 +608,7 @@ const UploadScreen = ({ navigation, route }) => {
                 delete newState[`${docId}_${fileIndex}`];
                 return newState;
               });
-              
+
               resolve({
                 downloadURL: downloadURL ?? null,
                 storagePath: storagePath ?? null,
@@ -601,192 +685,224 @@ const UploadScreen = ({ navigation, route }) => {
   };
 
   const handleFileUpload = async (docId, allowMultiple = true) => {
-  try {
-    const DocumentPicker = await import("expo-document-picker");
-    const result = await DocumentPicker.getDocumentAsync({
-      type: [
-        "image/*",
-        "image/jpeg",
-        "image/jpg", 
-        "image/png",
-        "image/gif",
-        "image/bmp",
-        "image/webp"
-      ],
-      copyToCacheDirectory: true,
-      multiple: allowMultiple,
-    });
+    try {
+      const DocumentPicker = await import("expo-document-picker");
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          "image/*",
+          "image/jpeg",
+          "image/jpg",
+          "image/png",
+          "image/gif",
+          "image/bmp",
+          "image/webp",
+        ],
+        copyToCacheDirectory: true,
+        multiple: allowMultiple,
+      });
 
-    if (result.canceled) return;
+      if (result.canceled) return;
 
-    const files = result.assets;
-    const processedFiles = [];
+      const files = result.assets;
+      const processedFiles = [];
 
-    if (docId === 'form_101') {
-      if (files.length > 4) {
-        Alert.alert("ข้อผิดพลาด", "เอกสาร Form 101 สามารถอัปโหลดได้สูงสุด 4 ไฟล์เท่านั้น");
-        return;
-      }
-      
-      const imagesToProcess = files.filter(file => isImageFile(file.mimeType, file.name));
-      const otherFiles = files.filter(file => !isImageFile(file.mimeType, file.name));
-
-      // Process non-image files first
-      for (const file of otherFiles) {
-        const fileWithMetadata = {
-          filename: file.name ?? null,
-          uri: file.uri ?? null,
-          mimeType: file.mimeType ?? null,
-          size: file.size ?? null,
-          uploadDate: new Date().toLocaleString("th-TH"),
-          status: "pending",
-          aiValidated: needsAIValidation(docId),
-          fileIndex: (uploads[docId] || []).length + processedFiles.length,
-        };
-
-        // AI validation for non-image files
-        if (needsAIValidation(docId)) {
-          console.log(`🔥 FORM 101 NON-IMAGE - Starting AI validation for ${file.name}...`);
-          const isValid = await performAIValidation(fileWithMetadata, docId);
-          if (!isValid) {
-            console.log(`❌ FORM 101 NON-IMAGE - AI validation failed for ${file.name}`);
-            continue; // Skip this file if validation fails
-          }
-          console.log(`✅ FORM 101 NON-IMAGE - AI validation passed for ${file.name}`);
-        }
-
-        processedFiles.push(fileWithMetadata);
-      }
-
-      // Process and merge images if any
-      if (imagesToProcess.length > 0) {
-        setIsConvertingToPDF(prev => ({
-          ...prev,
-          [`${docId}_merge`]: true
-        }));
-        
-        try {
-          console.log(`🔥 FORM 101 IMAGES - Merging ${imagesToProcess.length} images to PDF...`);
-          const mergedPdfFile = await mergeImagesToPdf(imagesToProcess, docId);
-          
-          // AI validation for the merged PDF - THIS WAS MISSING!
-          if (needsAIValidation(docId)) {
-            console.log(`🔥 FORM 101 MERGED PDF - Starting AI validation...`);
-            const isValid = await performAIValidation(mergedPdfFile, docId);
-            if (!isValid) {
-              console.log(`❌ FORM 101 MERGED PDF - AI validation failed`);
-              setIsConvertingToPDF(prev => {
-                const newState = { ...prev };
-                delete newState[`${docId}_merge`];
-                return newState;
-              });
-              return; // Don't add the file if validation fails
-            }
-            console.log(`✅ FORM 101 MERGED PDF - AI validation passed`);
-          }
-
-          processedFiles.push(mergedPdfFile);
-        } catch (error) {
-          console.error("Error merging images to PDF:", error);
-          Alert.alert("ข้อผิดพลาด", `ไม่สามารถรวมรูปภาพเป็น PDF ได้: ${error.message}`);
-          setIsConvertingToPDF(prev => {
-            const newState = { ...prev };
-            delete newState[`${docId}_merge`];
-            return newState;
-          });
+      if (docId === "form_101") {
+        if (files.length > 4) {
+          Alert.alert(
+            "ข้อผิดพลาด",
+            "เอกสาร Form 101 สามารถอัปโหลดได้สูงสุด 4 ไฟล์เท่านั้น"
+          );
           return;
-        } finally {
-          setIsConvertingToPDF(prev => {
-            const newState = { ...prev };
-            delete newState[`${docId}_merge`];
-            return newState;
-          });
         }
-      }
 
-    } else {
-      // Handle other document types (existing logic)
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        let processedFile = file;
-        let originalMetadata = {
-          filename: file.filename ?? file.name ?? null,
-          mimeType: file.mimeType ?? null,
-          size: file.size ?? null,
-          uri: file.uri ?? null,
-        };
+        const imagesToProcess = files.filter((file) =>
+          isImageFile(file.mimeType, file.name)
+        );
+        const otherFiles = files.filter(
+          (file) => !isImageFile(file.mimeType, file.name)
+        );
 
-        if (isImageFile(file.mimeType, file.name)) {
+        // Process non-image files first
+        for (const file of otherFiles) {
+          const fileWithMetadata = {
+            filename: file.name ?? null,
+            uri: file.uri ?? null,
+            mimeType: file.mimeType ?? null,
+            size: file.size ?? null,
+            uploadDate: new Date().toLocaleString("th-TH"),
+            status: "pending",
+            aiValidated: needsAIValidation(docId),
+            fileIndex: (uploads[docId] || []).length + processedFiles.length,
+          };
+
+          // AI validation for non-image files
+          if (needsAIValidation(docId)) {
+            console.log(
+              `🔥 FORM 101 NON-IMAGE - Starting AI validation for ${file.name}...`
+            );
+            const isValid = await performAIValidation(fileWithMetadata, docId);
+            if (!isValid) {
+              console.log(
+                `❌ FORM 101 NON-IMAGE - AI validation failed for ${file.name}`
+              );
+              continue; // Skip this file if validation fails
+            }
+            console.log(
+              `✅ FORM 101 NON-IMAGE - AI validation passed for ${file.name}`
+            );
+          }
+
+          processedFiles.push(fileWithMetadata);
+        }
+
+        // Process and merge images if any
+        if (imagesToProcess.length > 0) {
+          setIsConvertingToPDF((prev) => ({
+            ...prev,
+            [`${docId}_merge`]: true,
+          }));
+
           try {
-            const convertedPdf = await convertImageToPDF(file, docId, i);
-            processedFile = {
-              ...originalMetadata,
-              ...convertedPdf,
-              filename: convertedPdf.filename,
-              mimeType: 'application/pdf',
-            };
-          } catch (conversionError) {
-            console.error('PDF conversion failed:', conversionError);
-            Alert.alert("การแปลงล้มเหลว", `ไม่สามารถแปลงไฟล์ "${file.name ?? 'ไม่ทราบชื่อไฟล์'}" เป็น PDF ได้ จะใช้ไฟล์ต้นฉบับแทน`);
-            processedFile = file;
-          }
-        } else {
-          processedFile = originalMetadata;
-        }
-        
-        // AI validation for documents that need it
-        if (needsAIValidation(docId)) {
-          const isValid = await performAIValidation(processedFile, docId);
-          if (!isValid) {
-            continue;
-          }
-        }
+            console.log(
+              `🔥 FORM 101 IMAGES - Merging ${imagesToProcess.length} images to PDF...`
+            );
+            const mergedPdfFile = await mergeImagesToPdf(
+              imagesToProcess,
+              docId
+            );
 
-        const fileWithMetadata = {
-          filename: processedFile.filename ?? null,
-          uri: processedFile.uri ?? null,
-          mimeType: processedFile.mimeType ?? null,
-          size: processedFile.size ?? null,
-          uploadDate: new Date().toLocaleString("th-TH"),
-          status: "pending",
-          aiValidated: needsAIValidation(docId),
-          fileIndex: (uploads[docId] || []).length + processedFiles.length,
-          ...(processedFile.convertedFromImage !== undefined && {
-            convertedFromImage: processedFile.convertedFromImage ?? false,
-            originalImageName: processedFile.originalImageName ?? null,
-            originalImageType: processedFile.originalImageType ?? null,
-          }),
+            // AI validation for the merged PDF - THIS WAS MISSING!
+            if (needsAIValidation(docId)) {
+              console.log(`🔥 FORM 101 MERGED PDF - Starting AI validation...`);
+              const isValid = await performAIValidation(mergedPdfFile, docId);
+              if (!isValid) {
+                console.log(`❌ FORM 101 MERGED PDF - AI validation failed`);
+                setIsConvertingToPDF((prev) => {
+                  const newState = { ...prev };
+                  delete newState[`${docId}_merge`];
+                  return newState;
+                });
+                return; // Don't add the file if validation fails
+              }
+              console.log(`✅ FORM 101 MERGED PDF - AI validation passed`);
+            }
+
+            processedFiles.push(mergedPdfFile);
+          } catch (error) {
+            console.error("Error merging images to PDF:", error);
+            Alert.alert(
+              "ข้อผิดพลาด",
+              `ไม่สามารถรวมรูปภาพเป็น PDF ได้: ${error.message}`
+            );
+            setIsConvertingToPDF((prev) => {
+              const newState = { ...prev };
+              delete newState[`${docId}_merge`];
+              return newState;
+            });
+            return;
+          } finally {
+            setIsConvertingToPDF((prev) => {
+              const newState = { ...prev };
+              delete newState[`${docId}_merge`];
+              return newState;
+            });
+          }
+        }
+      } else {
+        // Handle other document types (existing logic)
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          let processedFile = file;
+          let originalMetadata = {
+            filename: file.filename ?? file.name ?? null,
+            mimeType: file.mimeType ?? null,
+            size: file.size ?? null,
+            uri: file.uri ?? null,
+          };
+
+          if (isImageFile(file.mimeType, file.name)) {
+            try {
+              const convertedPdf = await convertImageToPDF(file, docId, i);
+              processedFile = {
+                ...originalMetadata,
+                ...convertedPdf,
+                filename: convertedPdf.filename,
+                mimeType: "application/pdf",
+              };
+            } catch (conversionError) {
+              console.error("PDF conversion failed:", conversionError);
+              Alert.alert(
+                "การแปลงล้มเหลว",
+                `ไม่สามารถแปลงไฟล์ "${
+                  file.name ?? "ไม่ทราบชื่อไฟล์"
+                }" เป็น PDF ได้ จะใช้ไฟล์ต้นฉบับแทน`
+              );
+              processedFile = file;
+            }
+          } else {
+            processedFile = originalMetadata;
+          }
+
+          // 🔥 แก้ไขส่วนนี้: เรียกใช้ performAIValidation อย่างถูกต้อง
+          if (needsAIValidation(docId)) {
+            const isValid = await performAIValidation(processedFile, docId);
+            if (!isValid) {
+              console.log(
+                `❌ AI validation failed for ${docId}, skipping file`
+              );
+              continue; // ข้ามไฟล์นี้ถ้า validation ไม่ผ่าน
+            }
+            console.log(`✅ AI validation passed for ${docId}`);
+          }
+
+          const fileWithMetadata = {
+            filename: processedFile.filename ?? null,
+            uri: processedFile.uri ?? null,
+            mimeType: processedFile.mimeType ?? null,
+            size: processedFile.size ?? null,
+            uploadDate: new Date().toLocaleString("th-TH"),
+            status: "pending",
+            aiValidated: needsAIValidation(docId),
+            fileIndex: (uploads[docId] || []).length + processedFiles.length,
+            ...(processedFile.convertedFromImage !== undefined && {
+              convertedFromImage: processedFile.convertedFromImage ?? false,
+              originalImageName: processedFile.originalImageName ?? null,
+              originalImageType: processedFile.originalImageType ?? null,
+            }),
+          };
+
+          processedFiles.push(fileWithMetadata);
+        }
+      }
+
+      // Only update uploads if we have processed files (validation passed)
+      if (processedFiles.length > 0) {
+        const newUploads = {
+          ...uploads,
+          [docId]: [...(uploads[docId] || []), ...processedFiles],
         };
 
-        processedFiles.push(fileWithMetadata);
+        setUploads(newUploads);
+        await saveUploadsToFirebase(newUploads);
+        console.log(
+          `✅ Successfully added ${processedFiles.length} files for ${docId}`
+        );
+      } else {
+        console.log(
+          `❌ No files were added for ${docId} - all validations failed or user cancelled`
+        );
       }
+    } catch (error) {
+      Alert.alert("เกิดข้อผิดพลาด", "ไม่สามารถเลือกไฟล์ได้");
+      console.error(error);
     }
-    
-    // Only update uploads if we have processed files (validation passed)
-    if (processedFiles.length > 0) {
-      const newUploads = {
-        ...uploads,
-        [docId]: [...(uploads[docId] || []), ...processedFiles],
-      };
-
-      setUploads(newUploads);
-      await saveUploadsToFirebase(newUploads);
-      console.log(`✅ Successfully added ${processedFiles.length} files for ${docId}`);
-    } else {
-      console.log(`❌ No files were added for ${docId} - all validations failed or user cancelled`);
-    }
-
-  } catch (error) {
-    Alert.alert("เกิดข้อผิดพลาด", "ไม่สามารถเลือกไฟล์ได้");
-    console.error(error);
-  }
-};
+  };
 
   // Rest of the component methods remain the same...
   // Updated: Handle remove specific file from document
   const handleRemoveFile = async (docId, fileIndex = null) => {
     const docFiles = uploads[docId] || [];
-    
+
     if (fileIndex !== null && fileIndex >= 0 && fileIndex < docFiles.length) {
       // Remove specific file
       const fileToRemove = docFiles[fileIndex];
@@ -799,18 +915,25 @@ const UploadScreen = ({ navigation, route }) => {
             text: "ลบ",
             style: "destructive",
             onPress: async () => {
-              const newFiles = docFiles.filter((_, index) => index !== fileIndex);
-              
+              const newFiles = docFiles.filter(
+                (_, index) => index !== fileIndex
+              );
+
               // Clean up temporary PDF files if they were converted from images
               if (fileToRemove.convertedFromImage && fileToRemove.uri) {
                 try {
-                  await FileSystem.deleteAsync(fileToRemove.uri, { idempotent: true });
-                  console.log('✓ Cleaned up temporary PDF file');
+                  await FileSystem.deleteAsync(fileToRemove.uri, {
+                    idempotent: true,
+                  });
+                  console.log("✓ Cleaned up temporary PDF file");
                 } catch (cleanupError) {
-                  console.warn('Could not clean up temporary file:', cleanupError);
+                  console.warn(
+                    "Could not clean up temporary file:",
+                    cleanupError
+                  );
                 }
               }
-              
+
               const newUploads = { ...uploads };
               if (newFiles.length === 0) {
                 delete newUploads[docId];
@@ -821,7 +944,16 @@ const UploadScreen = ({ navigation, route }) => {
                 });
                 newUploads[docId] = newFiles;
               }
-              
+
+              // 🔄 อัพเดตชั่วโมงจิตอาสาหลังจากลบไฟล์
+              if (docId === "volunteer_doc") {
+                const newHours = calculateVolunteerHoursFromUploads(newUploads);
+                setVolunteerHours(newHours);
+                console.log(
+                  `🔄 Updated volunteer hours after deletion: ${newHours}`
+                );
+              }
+
               setUploads(newUploads);
               await saveUploadsToFirebase(newUploads);
               handleCloseModal();
@@ -844,15 +976,29 @@ const UploadScreen = ({ navigation, route }) => {
               for (const file of docFiles) {
                 if (file.convertedFromImage && file.uri) {
                   try {
-                    await FileSystem.deleteAsync(file.uri, { idempotent: true });
+                    await FileSystem.deleteAsync(file.uri, {
+                      idempotent: true,
+                    });
                   } catch (cleanupError) {
-                    console.warn('Could not clean up temporary file:', cleanupError);
+                    console.warn(
+                      "Could not clean up temporary file:",
+                      cleanupError
+                    );
                   }
                 }
               }
-              
+
               const newUploads = { ...uploads };
               delete newUploads[docId];
+
+              // 🔄 รีเซ็ตชั่วโมงจิตอาสาหากลบเอกสารจิตอาสาทั้งหมด
+              if (docId === "volunteer_doc") {
+                setVolunteerHours(0);
+                console.log(
+                  "🔄 Reset volunteer hours to 0 after deleting all files"
+                );
+              }
+
               setUploads(newUploads);
               await saveUploadsToFirebase(newUploads);
               handleCloseModal();
@@ -862,12 +1008,13 @@ const UploadScreen = ({ navigation, route }) => {
       );
     }
   };
-
   // Rest of the methods remain identical to the original file...
   const handleSubmitDocuments = async () => {
-    const documentsToUse = document;
-    const requiredDocs = documentsToUse.filter((doc) => doc.required);
-    const uploadedRequiredDocs = requiredDocs.filter((doc) => uploads[doc.id] && uploads[doc.id].length > 0);
+    const documents = generateDocumentsList(surveyData);
+    const requiredDocs = documents.filter((doc) => doc.required);
+    const uploadedRequiredDocs = requiredDocs.filter(
+      (doc) => uploads[doc.id] && uploads[doc.id].length > 0
+    );
 
     if (uploadedRequiredDocs.length < requiredDocs.length) {
       Alert.alert(
@@ -898,7 +1045,8 @@ const UploadScreen = ({ navigation, route }) => {
         if (userDoc.exists()) {
           const userData = userDoc.data();
           studentId = userData.student_id || "Unknown_Student";
-          studentName = userData.profile?.student_name ||
+          studentName =
+            userData.profile?.student_name ||
             userData.name ||
             userData.nickname ||
             "Unknown_Student";
@@ -911,11 +1059,11 @@ const UploadScreen = ({ navigation, route }) => {
       const storageUploads = {};
       const academicYear = appConfig?.academicYear || "2568";
       const term = appConfig?.term || "1";
-      
+
       // Upload all files for each document
       for (const [docId, files] of Object.entries(uploads)) {
         const uploadedFiles = [];
-        
+
         for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
           const file = files[fileIndex];
           try {
@@ -926,7 +1074,7 @@ const UploadScreen = ({ navigation, route }) => {
               currentUser.uid,
               studentName,
               appConfig,
-              studentId,
+              studentId
             );
 
             uploadedFiles.push({
@@ -943,7 +1091,6 @@ const UploadScreen = ({ navigation, route }) => {
               originalImageName: storageData.originalImageName ?? null,
               originalImageType: storageData.originalImageType ?? null,
             });
-
           } catch (error) {
             console.error(`Failed to upload file ${file.filename}:`, error);
             Alert.alert(
@@ -954,10 +1101,10 @@ const UploadScreen = ({ navigation, route }) => {
             return;
           }
         }
-        
+
         storageUploads[docId] = uploadedFiles;
       }
-      
+
       const submissionData = {
         userId: currentUser.uid ?? null,
         userEmail: currentUser.email ?? null,
@@ -999,11 +1146,12 @@ const UploadScreen = ({ navigation, route }) => {
       });
 
       const totalFiles = Object.values(storageUploads).reduce(
-        (sum, files) => sum + files.length, 0
+        (sum, files) => sum + files.length,
+        0
       );
       const convertedFiles = Object.values(storageUploads)
         .flat()
-        .filter(file => file.convertedFromImage).length;
+        .filter((file) => file.convertedFromImage).length;
 
       let successMessage = `เอกสารของคุณได้ถูกส่งและอัปโหลดเรียบร้อยแล้ว\nจำนวนไฟล์: ${totalFiles} ไฟล์`;
       if (convertedFiles > 0) {
@@ -1011,20 +1159,16 @@ const UploadScreen = ({ navigation, route }) => {
       }
       successMessage += `\nปีการศึกษา: ${academicYear} เทอม: ${term}\nคุณสามารถติดตามได้ในหน้าแสดงผล`;
 
-      Alert.alert(
-        "ส่งเอกสารสำเร็จ",
-        successMessage,
-        [
-          {
-            text: "ดูสถานะ",
-            onPress: () => {
-              navigation.push("DocumentStatusScreen", {
-                submissionData: submissionData,
-              });
-            },
+      Alert.alert("ส่งเอกสารสำเร็จ", successMessage, [
+        {
+          text: "ดูสถานะ",
+          onPress: () => {
+            navigation.push("DocumentStatusScreen", {
+              submissionData: submissionData,
+            });
           },
-        ]
-      );
+        },
+      ]);
     } catch (error) {
       console.error("Error submitting documents:", error);
       Alert.alert(
@@ -1086,12 +1230,13 @@ const UploadScreen = ({ navigation, route }) => {
         setFileContent(content);
       } else if (mimeType.includes("pdf") || fileName.endsWith(".pdf")) {
         setContentType("pdf");
-        let pdfMessage = 'ไฟล์ PDF ต้องใช้แอปพลิเคชันภายนอกในการดู คลิก "เปิดด้วยแอปภายนอก" เพื่อดูไฟล์';
-        
+        let pdfMessage =
+          'ไฟล์ PDF ต้องใช้แอปพลิเคชันภายนอกในการดู คลิก "เปิดด้วยแอปภายนอก" เพื่อดูไฟล์';
+
         if (file.convertedFromImage) {
           pdfMessage = `ไฟล์ PDF ที่แปลงมาจากรูปภาพ\n(ไฟล์ต้นฉบับ: ${file.originalImageName})\n\n${pdfMessage}`;
         }
-        
+
         setFileContent(pdfMessage);
       } else {
         setContentType("other");
@@ -1139,18 +1284,25 @@ const UploadScreen = ({ navigation, route }) => {
 
   // Utility functions
   const getUploadStats = () => {
-    const documentsToUse = document;
-    const requiredDocs = documentsToUse.filter((doc) => doc.required);
-    const uploadedDocs = documentsToUse.filter((doc) => uploads[doc.id] && uploads[doc.id].length > 0);
-    const uploadedRequiredDocs = requiredDocs.filter((doc) => uploads[doc.id] && uploads[doc.id].length > 0);
-    
-    const totalFiles = Object.values(uploads).reduce((sum, files) => sum + files.length, 0);
+    const documents = generateDocumentsList(surveyData);
+    const requiredDocs = documents.filter((doc) => doc.required);
+    const uploadedDocs = documents.filter(
+      (doc) => uploads[doc.id] && uploads[doc.id].length > 0
+    );
+    const uploadedRequiredDocs = requiredDocs.filter(
+      (doc) => uploads[doc.id] && uploads[doc.id].length > 0
+    );
+
+    const totalFiles = Object.values(uploads).reduce(
+      (sum, files) => sum + files.length,
+      0
+    );
     const convertedFiles = Object.values(uploads)
       .flat()
-      .filter(file => file.convertedFromImage).length;
-    
+      .filter((file) => file.convertedFromImage).length;
+
     return {
-      total: documentsToUse.length,
+      total: documents.length,
       required: requiredDocs.length,
       uploaded: uploadedDocs.length,
       uploadedRequired: uploadedRequiredDocs.length,
@@ -1176,7 +1328,7 @@ const UploadScreen = ({ navigation, route }) => {
     return <EmptyState onStartSurvey={handleStartSurvey} />;
   }
 
-  const documents = document;
+  const documents = generateDocumentsList(surveyData);
   const stats = getUploadStats();
 
   return (
@@ -1190,7 +1342,8 @@ const UploadScreen = ({ navigation, route }) => {
 
       <ProgressCard stats={stats} />
 
-      {(Object.keys(storageUploadProgress).length > 0 || Object.keys(isConvertingToPDF).length > 0) && (
+      {(Object.keys(storageUploadProgress).length > 0 ||
+        Object.keys(isConvertingToPDF).length > 0) && (
         <StorageProgressCard
           storageUploadProgress={storageUploadProgress}
           uploads={uploads}
@@ -1208,6 +1361,7 @@ const UploadScreen = ({ navigation, route }) => {
         formatFileSize={formatFileSize}
         isValidatingAI={isValidatingAI}
         aiBackendAvailable={aiBackendAvailable}
+        volunteerHours={volunteerHours}
         isConvertingToPDF={isConvertingToPDF}
       />
 
@@ -1237,10 +1391,15 @@ const UploadScreen = ({ navigation, route }) => {
         totalFiles={uploads[selectedFile?.docId]?.length || 0}
         onNavigateFile={(direction) => {
           const currentDocFiles = uploads[selectedFile?.docId] || [];
-          const newIndex = direction === 'next' 
-            ? Math.min(selectedFileIndex + 1, currentDocFiles.length - 1)
-            : Math.max(selectedFileIndex - 1, 0);
-          handleShowFileModal(selectedFile?.docId, selectedDocTitle.split(' (')[0], newIndex);
+          const newIndex =
+            direction === "next"
+              ? Math.min(selectedFileIndex + 1, currentDocFiles.length - 1)
+              : Math.max(selectedFileIndex - 1, 0);
+          handleShowFileModal(
+            selectedFile?.docId,
+            selectedDocTitle.split(" (")[0],
+            newIndex
+          );
         }}
       />
     </ScrollView>
