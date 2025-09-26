@@ -12,7 +12,7 @@ import {
   getDoc,
   updateDoc,
   setDoc,
-  collection,
+  onSnapshot,
   deleteField,
 } from "firebase/firestore";
 import { storage } from "../../database/firebase";
@@ -40,7 +40,7 @@ import StorageProgressCard from "./components/StorageProgressCard";
 import DocumentsSection from "./components/DocumentsSection";
 import SubmitSection from "./components/SubmitSection";
 import FileDetailModal from "./components/FileDetailModal";
-import { generateDocumentsList } from "./utils/documentGenerator";
+import { generateDocumentsList, calculateAge } from "./utils/documentGenerator";
 import { handleDocumentDownload } from "./utils/documentHandlers";
 
 const UploadScreen = ({ navigation, route }) => {
@@ -63,13 +63,17 @@ const UploadScreen = ({ navigation, route }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [storageUploadProgress, setStorageUploadProgress] = useState({});
   const [appConfig, setAppConfig] = useState(null);
+  const [isConvertingToPDF, setIsConvertingToPDF] = useState({});
 
   // AI related states - UPDATED to use unified AI system
   const [isValidatingAI, setIsValidatingAI] = useState({});
   const [aiBackendAvailable, setAiBackendAvailable] = useState(false);
 
-  // New state for PDF conversion
-  const [isConvertingToPDF, setIsConvertingToPDF] = useState({});
+  const [academicYear, setAcademicYear] = useState(null);
+  const [term, setTerm] = useState(null);
+  const [birthDate, setBirthDate] = useState(null); // เก็บ Timestamp object ของวันเกิด
+  const [document, setDocuments] = useState([]);
+  const [userAge, setUserAge] = useState(null); // เพิ่มสำหรับเก็บอายุที่คำนวณได้
 
   // Check AI backend status on component mount - UPDATED to use unified AI system
   useEffect(() => {
@@ -83,34 +87,39 @@ const UploadScreen = ({ navigation, route }) => {
     checkAIStatus();
   }, []);
 
-  // Fetch app configuration
-  const fetchAppConfig = async () => {
-    try {
+  // -----------------------------------------------------
+  // 1. Config Listener (Term และ Academic Year)
+  // -----------------------------------------------------
+  useEffect(() => {
       const configRef = doc(db, "DocumentService", "config");
-      const configDoc = await getDoc(configRef);
+      
+      const configUnsubscribe = onSnapshot(configRef, (docSnap) => {
+          if (docSnap.exists()) {
+              const config = docSnap.data();
+              if (config) {
+                setAppConfig(config);
+                setAcademicYear(config.academicYear);
+                setTerm(config.term);
+              } else {
+                console.warn("ไม่พบ config document");
+              }
+          } else {
+              // ใช้ค่า Default หาก config document ไม่มี
+              const defaultConfig = { academicYear: "2567", term: "1" };
+              setAppConfig(defaultConfig);
+              setAcademicYear(defaultConfig.academicYear);
+              setTerm(defaultConfig.term);
+          }
+      }, (error) => {
+          console.error("Error listening to app config:", error);
+      });
 
-      if (configDoc.exists()) {
-        const config = configDoc.data();
-        setAppConfig(config);
-        console.log("App config loaded:", config);
-        return config;
-      } else {
-        const defaultConfig = {
-          academicYear: "2567",
-          term: "1",
-          isEnabled: true,
-          immediateAccess: true,
-        };
-        setAppConfig(defaultConfig);
-        return defaultConfig;
-      }
-    } catch (error) {
-      console.error("Error fetching app config:", error);
-      return null;
-    }
-  };
+      return () => configUnsubscribe();
+  }, []); // เรียกใช้ครั้งเดียวเมื่อ Component Mount
 
-  // Check submission status and load data
+  // -----------------------------------------------------
+  // 2. Check submission status and load data (ปรับปรุงการดึงข้อมูลอย่างปลอดภัย)
+  // -----------------------------------------------------
   useEffect(() => {
     const checkSubmissionStatus = async () => {
       setIsLoading(true);
@@ -120,30 +129,84 @@ const UploadScreen = ({ navigation, route }) => {
         return;
       }
 
-      const config = await fetchAppConfig();
+      // ***** แก้ไขส่วนที่ 1: ดึง Config อย่างปลอดภัย *****
+      let currentConfig = appConfig;
+      if (!currentConfig) {
+          const configDoc = await getDoc(doc(db, "DocumentService", "config"));
+          currentConfig = (configDoc && configDoc.exists()) 
+              ? configDoc.data() 
+              : { academicYear: "2567", term: "1" };
+      }
+      
+      // ***** ตรวจสอบ Submission status สำหรับ term ปัจจุบัน *****
       const termCollectionName = `document_submissions_${
-        config?.academicYear || "2567"
-      }_${config?.term || "1"}`;
+        currentConfig.academicYear || "2567"
+      }_${currentConfig.term || "1"}`;
+      
+      console.log(`🔍 Checking submission for collection: ${termCollectionName}`);
+      
       const submissionRef = doc(db, termCollectionName, currentUser.uid);
       const submissionDoc = await getDoc(submissionRef);
-
+      
       if (submissionDoc.exists()) {
+        console.log("✅ Found existing submission, redirecting to status screen");
         navigation.replace("DocumentStatusScreen", {
           submissionData: submissionDoc.data(),
         });
         setIsLoading(false);
         return;
+      } else {
+        console.log("📝 No submission found, loading upload screen");
       }
 
+      // ***** ดึงข้อมูล User และ Survey Data *****
       const userSurveyRef = doc(db, "users", currentUser.uid);
       const userSurveyDoc = await getDoc(userSurveyRef);
 
       if (userSurveyDoc.exists()) {
         const userData = userSurveyDoc.data();
-        const surveyData = userData.survey;
-        setSurveyData(surveyData);
-        setSurveyDocId(userSurveyDoc.id);
+        
+        // ***** สำหรับเทอม 2/3: ไม่จำเป็นต้องมี survey data *****
+        if (currentConfig.term === '2' || currentConfig.term === '3') {
+          console.log(`🎓 Term ${currentConfig.term}: Setting up without survey requirement`);
+          
+          // ใช้ข้อมูล birth_date จาก user document
+          const birthDateFromUser = userData.birth_date;
+          setBirthDate(birthDateFromUser);
+          
+          if (birthDateFromUser) {
+            const age = calculateAge(birthDateFromUser);
+            setUserAge(age);
+            console.log(`👤 User age calculated: ${age} years`);
+          }
+          
+          // สำหรับเทอม 2/3 ไม่ต้องมี survey data
+          setSurveyData({ term: currentConfig.term });
+          setSurveyDocId(userSurveyDoc.id);
+        } else {
+          // ***** สำหรับเทอม 1: ต้องมี survey data *****
+          const surveyData = userData.survey;
+          if (surveyData) {
+            setSurveyData({...surveyData, term: currentConfig.term });
+            setSurveyDocId(userSurveyDoc.id);
+            
+            // ดึง birth_date จาก survey หรือ user data
+            const birthDateData = userData.birth_date;
+            setBirthDate(birthDateData);
+            
+            if (birthDateData) {
+              const age = calculateAge(birthDateData);
+              setUserAge(age);
+              console.log(`👤 User age calculated: ${age} years`);
+            }
+          } else {
+            console.log("❌ Term 1 requires survey data but none found");
+            setSurveyData(null);
+            setSurveyDocId(null);
+          }
+        }
 
+        // ***** ดึงข้อมูล uploads ที่มีอยู่ *****
         if (userData.uploads) {
           // Convert old format to new format if needed
           const convertedUploads = {};
@@ -159,14 +222,60 @@ const UploadScreen = ({ navigation, route }) => {
           setUploads(convertedUploads);
         }
       } else {
-        setSurveyData(null);
-        setSurveyDocId(null);
+        // ไม่พบข้อมูล user
+        if (currentConfig.term === '2' || currentConfig.term === '3') {
+          console.log(`🎓 Term ${currentConfig.term}: Creating minimal data without survey requirement`);
+          // สำหรับเทอม 2/3 ไม่จำเป็นต้องมี survey data
+          setSurveyData({ term: currentConfig.term });
+          setSurveyDocId(null);
+        } else {
+          console.log("❌ Term 1 requires user data but none found");
+          setSurveyData(null);
+          setSurveyDocId(null);
+        }
       }
       setIsLoading(false);
     };
 
-    checkSubmissionStatus();
-  }, []);
+    // เรียกใช้เมื่อ appConfig ถูกโหลดแล้ว
+    if (appConfig) {
+        checkSubmissionStatus();
+    }
+    
+  }, [appConfig]); 
+
+  // -----------------------------------------------------
+  // 3. Document List Generator (สร้างรายการเอกสาร)
+  // -----------------------------------------------------
+  useEffect(() => {
+    // สำหรับเทอม 2/3: ใช้ birthDate และ term ในการสร้างรายการ
+    if (term === '2' || term === '3') {
+      console.log(`🎓 Generating documents for Term ${term}`);
+      const docs = generateDocumentsList({
+          term: term,
+          academicYear: academicYear,
+          birth_date: birthDate,
+      });
+      setDocuments(docs);
+      console.log(`📋 Generated ${docs.length} documents for Term ${term}`);
+    }
+    // สำหรับเทอม 1: ต้องมีข้อมูลที่จำเป็นครบถ้วน
+    else if (surveyData && term && academicYear && birthDate) {
+      console.log(`🎓 Generating documents for Term ${term}`);
+      const docs = generateDocumentsList({
+          ...surveyData, // ส่ง surveyData เดิม (familyStatus, incomes)
+          term: term,
+          academicYear: academicYear,
+          birth_date: birthDate, // ส่ง birth date (Timestamp) เพื่อคำนวดอายุ
+      });
+      setDocuments(docs);
+      console.log(`📋 Generated ${docs.length} documents for Term ${term}`);
+    } else if (!surveyData && term === '1') {
+      // หาก term 1 แต่ยังไม่มี surveyData ให้เคลียร์รายการเอกสาร
+      console.log("❌ Term 1 without survey data - clearing document list");
+      setDocuments([]); 
+    }
+  }, [surveyData, term, academicYear, birthDate]); // เรียกใช้เมื่อข้อมูลเหล่านี้มีการเปลี่ยนแปลง
 
   // Save uploads to Firebase
   const saveUploadsToFirebase = async (uploadsData) => {
