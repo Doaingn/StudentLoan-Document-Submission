@@ -139,9 +139,8 @@ const UploadScreen = ({ navigation, route }) => {
       }
       
       // ***** ตรวจสอบ Submission status สำหรับ term ปัจจุบัน *****
-      const termCollectionName = `document_submissions_${
-        currentConfig.academicYear || "2567"
-      }_${currentConfig.term || "1"}`;
+      const termCollectionName = `document_submissions_
+      ${currentConfig.academicYear}_${currentConfig.term}`;
       
       console.log(`🔍 Checking submission for collection: ${termCollectionName}`);
       
@@ -165,6 +164,9 @@ const UploadScreen = ({ navigation, route }) => {
 
       if (userSurveyDoc.exists()) {
         const userData = userSurveyDoc.data();
+        const surveyData = userData.survey;
+        setSurveyData(surveyData);
+        setSurveyDocId(userSurveyDoc.id);
         
         // ***** สำหรับเทอม 2/3: ไม่จำเป็นต้องมี survey data *****
         if (currentConfig.term === '2' || currentConfig.term === '3') {
@@ -187,7 +189,7 @@ const UploadScreen = ({ navigation, route }) => {
           // ***** สำหรับเทอม 1: ต้องมี survey data *****
           const surveyData = userData.survey;
           if (surveyData) {
-            setSurveyData({...surveyData, term: currentConfig.term });
+            setSurveyData(surveyData);
             setSurveyDocId(userSurveyDoc.id);
             
             // ดึง birth_date จาก survey หรือ user data
@@ -248,34 +250,54 @@ const UploadScreen = ({ navigation, route }) => {
   // 3. Document List Generator (สร้างรายการเอกสาร)
   // -----------------------------------------------------
   useEffect(() => {
-    // สำหรับเทอม 2/3: ใช้ birthDate และ term ในการสร้างรายการ
-    if (term === '2' || term === '3') {
-      console.log(`🎓 Generating documents for Term ${term}`);
-      const docs = generateDocumentsList({
-          term: term,
-          academicYear: academicYear,
-          birth_date: birthDate,
-      });
-      setDocuments(docs);
-      console.log(`📋 Generated ${docs.length} documents for Term ${term}`);
+  // ตัวแปรสำหรับตรวจสอบความพร้อมของข้อมูล
+  let isDataReady = false;
+  let requiredData = {};
+
+  if (term === '1') {
+    // สำหรับเทอม 1: ต้องมี surveyData, academicYear, และ birthDate
+    if (surveyData && academicYear && birthDate) {
+      isDataReady = true;
+      requiredData = {
+        ...surveyData,
+        term: term,
+        academicYear: academicYear,
+        birth_date: birthDate,
+      };
+    } else if (!surveyData) {
+      // Log นี้จำเป็นต้องมีอยู่ แต่เราจะเพิ่มเงื่อนไขให้ชัดเจนขึ้น
+      console.log("❌ Term 1 without survey data - clearing document list (Waiting for data...)");
+      setDocuments([]); // เคลียร์เอกสารจนกว่าข้อมูลจะพร้อม
     }
-    // สำหรับเทอม 1: ต้องมีข้อมูลที่จำเป็นครบถ้วน
-    else if (surveyData && term && academicYear && birthDate) {
-      console.log(`🎓 Generating documents for Term ${term}`);
-      const docs = generateDocumentsList({
-          ...surveyData, // ส่ง surveyData เดิม (familyStatus, incomes)
-          term: term,
-          academicYear: academicYear,
-          birth_date: birthDate, // ส่ง birth date (Timestamp) เพื่อคำนวดอายุ
-      });
-      setDocuments(docs);
-      console.log(`📋 Generated ${docs.length} documents for Term ${term}`);
-    } else if (!surveyData && term === '1') {
-      // หาก term 1 แต่ยังไม่มี surveyData ให้เคลียร์รายการเอกสาร
-      console.log("❌ Term 1 without survey data - clearing document list");
-      setDocuments([]); 
+  } else if (term === '2' || term === '3') {
+    // สำหรับเทอม 2/3: ต้องมี academicYear และ birthDate
+    if (academicYear && birthDate) {
+      isDataReady = true;
+      requiredData = {
+        term: term,
+        academicYear: academicYear,
+        birth_date: birthDate,
+        surveyData: surveyData || null, // surveyData อาจจะไม่มี
+      };
     }
-  }, [surveyData, term, academicYear, birthDate]); // เรียกใช้เมื่อข้อมูลเหล่านี้มีการเปลี่ยนแปลง
+  }
+  
+  // *** จุดที่ป้องกันการทำงานซ้ำ: Logic จะทำงานเมื่อ isDataReady เป็น true เท่านั้น ***
+  if (isDataReady) {
+    console.log(`🎓 Generating documents for Term ${term} (Final Data Ready)`);
+    
+    // เรียกใช้ฟังก์ชัน generateDocumentsList/getRequiredDocuments ด้วยข้อมูลที่เตรียมไว้
+    // (ใช้ชื่อฟังก์ชันที่คุณใช้อยู่เดิม เช่น generateDocumentsList)
+    const docs = generateDocumentsList(requiredData); 
+    
+    setDocuments(docs);
+    console.log(`📋 Generated ${docs.length} documents for Term ${term}`);
+    
+    // *** สำคัญ: ควรเรียก initializeUploads ที่นี่เพื่อให้แน่ใจว่าทำงานเมื่อเอกสารถูกกำหนดแล้ว ***
+    // initializeUploads(docs); 
+  }
+
+}, [surveyData, term, academicYear, birthDate]); // Dependency Array
 
   // Save uploads to Firebase
   const saveUploadsToFirebase = async (uploadsData) => {
@@ -579,10 +601,10 @@ const UploadScreen = ({ navigation, route }) => {
   };
 
   const handleFileUpload = async (docId, allowMultiple = true) => {
-    try {
-      const DocumentPicker = await import("expo-document-picker");
-      const result = await DocumentPicker.getDocumentAsync({
-        type: [
+  try {
+    const DocumentPicker = await import("expo-document-picker");
+    const result = await DocumentPicker.getDocumentAsync({
+      type: [
         "image/*",
         "image/jpeg",
         "image/jpg", 
@@ -595,117 +617,153 @@ const UploadScreen = ({ navigation, route }) => {
       multiple: allowMultiple,
     });
 
-      if (result.canceled) return;
+    if (result.canceled) return;
 
-      const files = result.assets;
-      const processedFiles = [];
+    const files = result.assets;
+    const processedFiles = [];
 
-      if (docId === 'form_101') {
-        if (files.length > 4) {
-          Alert.alert("ข้อผิดพลาด", "เอกสาร Form 101 สามารถอัปโหลดได้สูงสุด 4 ไฟล์เท่านั้น");
-          return;
-        }
-        
-        const imagesToProcess = files.filter(file => isImageFile(file.mimeType, file.name));
-        const otherFiles = files.filter(file => !isImageFile(file.mimeType, file.name));
-
-        for (const file of otherFiles) {
-          processedFiles.push({
-            filename: file.name ?? null,
-            uri: file.uri ?? null,
-            mimeType: file.mimeType ?? null,
-            size: file.size ?? null,
-            uploadDate: new Date().toLocaleString("th-TH"),
-            status: "pending",
-            aiValidated: needsAIValidation(docId), // Updated to use unified AI system
-            fileIndex: (uploads[docId] || []).length + processedFiles.length,
-          });
-        }
-
-        if (imagesToProcess.length > 0) {
-          setIsConvertingToPDF(prev => ({
-            ...prev,
-            [`${docId}_merge`]: true
-          }));
-          
-          try {
-            const mergedPdfFile = await mergeImagesToPdf(imagesToProcess, docId);
-            processedFiles.push(mergedPdfFile);
-          } catch (error) {
-            console.error("Error merging images to PDF:", error);
-            Alert.alert("ข้อผิดพลาด", `ไม่สามารถรวมรูปภาพเป็น PDF ได้: ${error.message}`);
-            setIsConvertingToPDF(prev => {
-              const newState = { ...prev };
-              delete newState[`${docId}_merge`];
-              return newState;
-            });
-            return;
-          } finally {
-            setIsConvertingToPDF(prev => {
-              const newState = { ...prev };
-              delete newState[`${docId}_merge`];
-              return newState;
-            });
-          }
-        }
-
-      } else {
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          let processedFile = file;
-          let originalMetadata = {
-            filename: file.filename ?? file.name ?? null,
-            mimeType: file.mimeType ?? null,
-            size: file.size ?? null,
-            uri: file.uri ?? null,
-          };
-
-          if (isImageFile(file.mimeType, file.name)) {
-            try {
-              const convertedPdf = await convertImageToPDF(file, docId, i);
-              processedFile = {
-                ...originalMetadata,
-                ...convertedPdf,
-                filename: convertedPdf.filename,
-                mimeType: 'application/pdf',
-              };
-            } catch (conversionError) {
-              console.error('PDF conversion failed:', conversionError);
-              Alert.alert("การแปลงล้มเหลว", `ไม่สามารถแปลงไฟล์ "${file.name ?? 'ไม่ทราบชื่อไฟล์'}" เป็น PDF ได้ จะใช้ไฟล์ต้นฉบับแทน`);
-              processedFile = file;
-            }
-          } else {
-            processedFile = originalMetadata;
-          }
-          
-          // AI validation for documents that need it - UPDATED to use unified system
-          if (needsAIValidation(docId)) {
-            const isValid = await performAIValidation(processedFile, docId);
-            if (!isValid) {
-              continue;
-            }
-          }
-
-          const fileWithMetadata = {
-            filename: processedFile.filename ?? null,
-            uri: processedFile.uri ?? null,
-            mimeType: processedFile.mimeType ?? null,
-            size: processedFile.size ?? null,
-            uploadDate: new Date().toLocaleString("th-TH"),
-            status: "pending",
-            aiValidated: needsAIValidation(docId), // Updated to use unified AI system
-            fileIndex: (uploads[docId] || []).length + processedFiles.length,
-            ...(processedFile.convertedFromImage !== undefined && {
-              convertedFromImage: processedFile.convertedFromImage ?? false,
-              originalImageName: processedFile.originalImageName ?? null,
-              originalImageType: processedFile.originalImageType ?? null,
-            }),
-          };
-
-          processedFiles.push(fileWithMetadata);
-        }
+    if (docId === 'form_101') {
+      if (files.length > 4) {
+        Alert.alert("ข้อผิดพลาด", "เอกสาร Form 101 สามารถอัปโหลดได้สูงสุด 4 ไฟล์เท่านั้น");
+        return;
       }
       
+      const imagesToProcess = files.filter(file => isImageFile(file.mimeType, file.name));
+      const otherFiles = files.filter(file => !isImageFile(file.mimeType, file.name));
+
+      // Process non-image files first
+      for (const file of otherFiles) {
+        const fileWithMetadata = {
+          filename: file.name ?? null,
+          uri: file.uri ?? null,
+          mimeType: file.mimeType ?? null,
+          size: file.size ?? null,
+          uploadDate: new Date().toLocaleString("th-TH"),
+          status: "pending",
+          aiValidated: needsAIValidation(docId),
+          fileIndex: (uploads[docId] || []).length + processedFiles.length,
+        };
+
+        // AI validation for non-image files
+        if (needsAIValidation(docId)) {
+          console.log(`🔥 FORM 101 NON-IMAGE - Starting AI validation for ${file.name}...`);
+          const isValid = await performAIValidation(fileWithMetadata, docId);
+          if (!isValid) {
+            console.log(`❌ FORM 101 NON-IMAGE - AI validation failed for ${file.name}`);
+            continue; // Skip this file if validation fails
+          }
+          console.log(`✅ FORM 101 NON-IMAGE - AI validation passed for ${file.name}`);
+        }
+
+        processedFiles.push(fileWithMetadata);
+      }
+
+      // Process and merge images if any
+      if (imagesToProcess.length > 0) {
+        setIsConvertingToPDF(prev => ({
+          ...prev,
+          [`${docId}_merge`]: true
+        }));
+        
+        try {
+          console.log(`🔥 FORM 101 IMAGES - Merging ${imagesToProcess.length} images to PDF...`);
+          const mergedPdfFile = await mergeImagesToPdf(imagesToProcess, docId);
+          
+          // AI validation for the merged PDF - THIS WAS MISSING!
+          if (needsAIValidation(docId)) {
+            console.log(`🔥 FORM 101 MERGED PDF - Starting AI validation...`);
+            const isValid = await performAIValidation(mergedPdfFile, docId);
+            if (!isValid) {
+              console.log(`❌ FORM 101 MERGED PDF - AI validation failed`);
+              setIsConvertingToPDF(prev => {
+                const newState = { ...prev };
+                delete newState[`${docId}_merge`];
+                return newState;
+              });
+              return; // Don't add the file if validation fails
+            }
+            console.log(`✅ FORM 101 MERGED PDF - AI validation passed`);
+          }
+
+          processedFiles.push(mergedPdfFile);
+        } catch (error) {
+          console.error("Error merging images to PDF:", error);
+          Alert.alert("ข้อผิดพลาด", `ไม่สามารถรวมรูปภาพเป็น PDF ได้: ${error.message}`);
+          setIsConvertingToPDF(prev => {
+            const newState = { ...prev };
+            delete newState[`${docId}_merge`];
+            return newState;
+          });
+          return;
+        } finally {
+          setIsConvertingToPDF(prev => {
+            const newState = { ...prev };
+            delete newState[`${docId}_merge`];
+            return newState;
+          });
+        }
+      }
+
+    } else {
+      // Handle other document types (existing logic)
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        let processedFile = file;
+        let originalMetadata = {
+          filename: file.filename ?? file.name ?? null,
+          mimeType: file.mimeType ?? null,
+          size: file.size ?? null,
+          uri: file.uri ?? null,
+        };
+
+        if (isImageFile(file.mimeType, file.name)) {
+          try {
+            const convertedPdf = await convertImageToPDF(file, docId, i);
+            processedFile = {
+              ...originalMetadata,
+              ...convertedPdf,
+              filename: convertedPdf.filename,
+              mimeType: 'application/pdf',
+            };
+          } catch (conversionError) {
+            console.error('PDF conversion failed:', conversionError);
+            Alert.alert("การแปลงล้มเหลว", `ไม่สามารถแปลงไฟล์ "${file.name ?? 'ไม่ทราบชื่อไฟล์'}" เป็น PDF ได้ จะใช้ไฟล์ต้นฉบับแทน`);
+            processedFile = file;
+          }
+        } else {
+          processedFile = originalMetadata;
+        }
+        
+        // AI validation for documents that need it
+        if (needsAIValidation(docId)) {
+          const isValid = await performAIValidation(processedFile, docId);
+          if (!isValid) {
+            continue;
+          }
+        }
+
+        const fileWithMetadata = {
+          filename: processedFile.filename ?? null,
+          uri: processedFile.uri ?? null,
+          mimeType: processedFile.mimeType ?? null,
+          size: processedFile.size ?? null,
+          uploadDate: new Date().toLocaleString("th-TH"),
+          status: "pending",
+          aiValidated: needsAIValidation(docId),
+          fileIndex: (uploads[docId] || []).length + processedFiles.length,
+          ...(processedFile.convertedFromImage !== undefined && {
+            convertedFromImage: processedFile.convertedFromImage ?? false,
+            originalImageName: processedFile.originalImageName ?? null,
+            originalImageType: processedFile.originalImageType ?? null,
+          }),
+        };
+
+        processedFiles.push(fileWithMetadata);
+      }
+    }
+    
+    // Only update uploads if we have processed files (validation passed)
+    if (processedFiles.length > 0) {
       const newUploads = {
         ...uploads,
         [docId]: [...(uploads[docId] || []), ...processedFiles],
@@ -713,12 +771,16 @@ const UploadScreen = ({ navigation, route }) => {
 
       setUploads(newUploads);
       await saveUploadsToFirebase(newUploads);
-
-    } catch (error) {
-      Alert.alert("เกิดข้อผิดพลาด", "ไม่สามารถเลือกไฟล์ได้");
-      console.error(error);
+      console.log(`✅ Successfully added ${processedFiles.length} files for ${docId}`);
+    } else {
+      console.log(`❌ No files were added for ${docId} - all validations failed or user cancelled`);
     }
-  };
+
+  } catch (error) {
+    Alert.alert("เกิดข้อผิดพลาด", "ไม่สามารถเลือกไฟล์ได้");
+    console.error(error);
+  }
+};
 
   // Rest of the component methods remain the same...
   // Updated: Handle remove specific file from document
@@ -803,8 +865,8 @@ const UploadScreen = ({ navigation, route }) => {
 
   // Rest of the methods remain identical to the original file...
   const handleSubmitDocuments = async () => {
-    const documents = generateDocumentsList(surveyData);
-    const requiredDocs = documents.filter((doc) => doc.required);
+    const documentsToUse = document;
+    const requiredDocs = documentsToUse.filter((doc) => doc.required);
     const uploadedRequiredDocs = requiredDocs.filter((doc) => uploads[doc.id] && uploads[doc.id].length > 0);
 
     if (uploadedRequiredDocs.length < requiredDocs.length) {
@@ -1077,9 +1139,9 @@ const UploadScreen = ({ navigation, route }) => {
 
   // Utility functions
   const getUploadStats = () => {
-    const documents = generateDocumentsList(surveyData);
-    const requiredDocs = documents.filter((doc) => doc.required);
-    const uploadedDocs = documents.filter((doc) => uploads[doc.id] && uploads[doc.id].length > 0);
+    const documentsToUse = document;
+    const requiredDocs = documentsToUse.filter((doc) => doc.required);
+    const uploadedDocs = documentsToUse.filter((doc) => uploads[doc.id] && uploads[doc.id].length > 0);
     const uploadedRequiredDocs = requiredDocs.filter((doc) => uploads[doc.id] && uploads[doc.id].length > 0);
     
     const totalFiles = Object.values(uploads).reduce((sum, files) => sum + files.length, 0);
@@ -1088,7 +1150,7 @@ const UploadScreen = ({ navigation, route }) => {
       .filter(file => file.convertedFromImage).length;
     
     return {
-      total: documents.length,
+      total: documentsToUse.length,
       required: requiredDocs.length,
       uploaded: uploadedDocs.length,
       uploadedRequired: uploadedRequiredDocs.length,
@@ -1114,7 +1176,7 @@ const UploadScreen = ({ navigation, route }) => {
     return <EmptyState onStartSurvey={handleStartSurvey} />;
   }
 
-  const documents = generateDocumentsList(surveyData);
+  const documents = document;
   const stats = getUploadStats();
 
   return (
