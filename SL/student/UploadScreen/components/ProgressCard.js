@@ -1,82 +1,124 @@
-// components/ProgressCard.js - Updated for multiple files support
-import React from "react";
+// components/ProgressCard.js - Updated for Term 2/3 support
 import { View, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-const ProgressCard = ({ stats }) => {
+const ProgressCard = ({ stats, term = '1' }) => {
+  
+  const getProgressTitle = () => {
+    switch(term) {
+      case '1': return 'ความคืบหน้าการอัปโหลด';
+      case '2': return 'ความคืบหน้าการอัปโหลดเอกสาร เทอม 2';
+      case '3': return 'ความคืบหน้าการอัปโหลดเอกสาร เทอม 3';
+      default: return 'ความคืบหน้าการอัปโหลด';
+    }
+  };
+
+  const getProgressDescription = () => {
+    switch(term) {
+      case '1': return 'อัปโหลดเอกสารที่จำเป็นสำหรับการสมัครทุน';
+      case '2': return 'อัปโหลดเอกสารที่จำเป็นสำหรับการเบิกเงินกู้ยืม';
+      case '3': return 'อัปโหลดเอกสารที่จำเป็นสำหรับการเบิกเงินกู้ยืม';
+      default: return 'อัปโหลดเอกสารที่จำเป็น';
+    }
+  };
+
+  const progressPercentage = stats.required > 0 ? Math.round((stats.uploadedRequired / stats.required) * 100) : 0;
+  const isComplete = stats.uploadedRequired === stats.required && stats.required > 0;
+
+  const getProgressColor = () => {
+    if (isComplete) return "#10b981"; // Green
+    if (progressPercentage >= 50) return "#f59e0b"; // Orange
+    return "#ef4444"; // Red
+  };
+
+  const getProgressIcon = () => {
+    if (isComplete) return "checkmark-circle";
+    if (progressPercentage >= 50) return "time";
+    return "document-text-outline";
+  };
+
   return (
     <View style={styles.progressCard}>
-      <Text style={styles.progressTitle}>สถานะการอัปโหลด</Text>
-      
-      {/* Document Progress */}
-      <View style={styles.statusGrid}>
-        <View style={styles.statusItem}>
-          <Text style={[styles.statusNumber, { color: "#10b981" }]}>
-            {stats.uploadedRequired}
-          </Text>
-          <Text style={styles.statusLabel}>เอกสารอัปโหลดแล้ว</Text>
-        </View>
-        <View style={styles.statusItem}>
-          <Text style={[styles.statusNumber, { color: "#f59e0b" }]}>
-            {stats.required - stats.uploadedRequired}
-          </Text>
-          <Text style={styles.statusLabel}>เอกสารคงเหลือ</Text>
-        </View>
-        <View style={styles.statusItem}>
-          <Text style={[styles.statusNumber, { color: "#2563eb" }]}>
-            {stats.required}
-          </Text>
-          <Text style={styles.statusLabel}>จำเป็นทั้งหมด</Text>
-        </View>
-      </View>
-
-      {/* Files Counter */}
-      {stats.totalFiles > 0 && (
-        <View style={styles.filesCounter}>
-          <View style={styles.filesCounterHeader}>
-            <Ionicons name="documents" size={16} color="#6366f1" />
-            <Text style={styles.filesCounterTitle}>จำนวนไฟล์ทั้งหมด</Text>
-          </View>
-          <Text style={styles.filesCounterNumber}>
-            {stats.totalFiles} ไฟล์
-          </Text>
-        </View>
-      )}
-
-      {/* Progress Bar */}
-      <View style={styles.progressBarContainer}>
-        <View style={styles.progressBar}>
-          <View
-            style={[
-              styles.progressFill,
-              {
-                width: `${(stats.uploadedRequired / stats.required) * 100}%`,
-              },
-            ]}
+      <View style={styles.progressHeader}>
+        <View style={styles.progressIcon}>
+          <Ionicons 
+            name={getProgressIcon()} 
+            size={24} 
+            color={getProgressColor()} 
           />
         </View>
-        <View style={styles.progressTextContainer}>
-          <Text style={styles.progressText}>
-            {Math.round((stats.uploadedRequired / stats.required) * 100)}%
-            เสร็จสิ้น
-          </Text>
-          {stats.uploadedRequired === stats.required && (
-            <View style={styles.completeIndicator}>
-              <Ionicons name="checkmark-circle" size={16} color="#10b981" />
-              <Text style={styles.completeText}>ครบถ้วน</Text>
-            </View>
-          )}
+        <View style={styles.progressInfo}>
+          <Text style={styles.progressTitle}>{getProgressTitle()}</Text>
+          <Text style={styles.progressDescription}>{getProgressDescription()}</Text>
         </View>
+        <Text style={[styles.progressPercent, { color: getProgressColor() }]}>
+          {progressPercentage}%
+        </Text>
+      </View>
+      
+      {/* Progress bar */}
+      <View style={styles.progressBarContainer}>
+        <View style={styles.progressBar}>
+          <View 
+            style={[
+              styles.progressFill, 
+              { 
+                width: `${progressPercentage}%`,
+                backgroundColor: getProgressColor()
+              }
+            ]} 
+          />
+        </View>
+        <Text style={styles.progressText}>
+          {stats.uploadedRequired}/{stats.required} เอกสารจำเป็น
+        </Text>
       </View>
 
-      {/* Additional Stats */}
-      {stats.uploaded > stats.uploadedRequired && (
-        <View style={styles.additionalStats}>
-          <Text style={styles.additionalStatsText}>
-            + {stats.uploaded - stats.uploadedRequired} เอกสารเพิ่มเติม
-          </Text>
+      {/* Additional stats */}
+      <View style={styles.statsContainer}>
+        <View style={styles.statItem}>
+          <View style={styles.statIcon}>
+            <Ionicons name="documents" size={16} color="#2563eb" />
+          </View>
+          <Text style={styles.statLabel}>เอกสารทั้งหมด:</Text>
+          <Text style={styles.statValue}>{stats.uploaded}/{stats.total}</Text>
         </View>
-      )}
+        
+        {stats.totalFiles > 0 && (
+          <View style={styles.statItem}>
+            <View style={styles.statIcon}>
+              <Ionicons name="folder" size={16} color="#8b5cf6" />
+            </View>
+            <Text style={styles.statLabel}>ไฟล์ทั้งหมด:</Text>
+            <Text style={styles.statValue}>{stats.totalFiles}</Text>
+          </View>
+        )}
+
+        {stats.convertedFiles > 0 && (
+          <View style={styles.statItem}>
+            <View style={styles.statIcon}>
+              <Ionicons name="image" size={16} color="#0ea5e9" />
+            </View>
+            <Text style={styles.statLabel}>แปลงจากรูป:</Text>
+            <Text style={styles.statValue}>{stats.convertedFiles}</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Status message */}
+      <View style={[styles.statusMessage, { backgroundColor: isComplete ? "#d1fae5" : "#fef3c7" }]}>
+        <Ionicons 
+          name={isComplete ? "checkmark-circle" : "information-circle"} 
+          size={16} 
+          color={isComplete ? "#065f46" : "#92400e"} 
+        />
+        <Text style={[styles.statusText, { color: isComplete ? "#065f46" : "#92400e" }]}>
+          {isComplete 
+            ? "เอกสารครบถ้วนแล้ว พร้อมส่งเอกสาร"
+            : `ยังต้องอัปโหลดอีก ${stats.required - stats.uploadedRequired} เอกสาร`
+          }
+        </Text>
+      </View>
     </View>
   );
 };
@@ -84,119 +126,89 @@ const ProgressCard = ({ stats }) => {
 const styles = StyleSheet.create({
   progressCard: {
     backgroundColor: "#fff",
-    padding: 20,
+    padding: 16,
     borderRadius: 16,
-    marginBottom: 20,
+    marginBottom: 16,
     shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 3,
   },
-  progressTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 16,
-    color: "#1e293b",
-    textAlign: "center",
-  },
-  statusGrid: {
+  progressHeader: {
     flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 16,
-  },
-  statusItem: {
     alignItems: "center",
+    marginBottom: 12,
+  },
+  progressIcon: {
+    marginRight: 12,
+  },
+  progressInfo: {
     flex: 1,
   },
-  statusNumber: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 4,
+  progressTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e293b",
+    marginBottom: 2,
   },
-  statusLabel: {
-    fontSize: 11,
-    color: "#64748b",
-    textAlign: "center",
-    lineHeight: 14,
-  },
-  filesCounter: {
-    backgroundColor: "#f8fafc",
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  filesCounterHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  filesCounterTitle: {
+  progressDescription: {
     fontSize: 12,
-    color: "#6366f1",
-    fontWeight: "500",
-    marginLeft: 4,
+    color: "#64748b",
   },
-  filesCounterNumber: {
+  progressPercent: {
     fontSize: 18,
-    fontWeight: "700",
-    color: "#6366f1",
-    textAlign: "center",
+    fontWeight: "bold",
   },
   progressBarContainer: {
-    marginBottom: 8,
+    marginBottom: 12,
   },
   progressBar: {
-    width: "100%",
     height: 8,
-    backgroundColor: "#e2e8f0",
+    backgroundColor: "#f1f5f9",
     borderRadius: 4,
-    overflow: "hidden",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   progressFill: {
     height: "100%",
-    backgroundColor: "#10b981",
     borderRadius: 4,
-  },
-  progressTextContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 8,
+    transition: "width 0.3s ease",
   },
   progressText: {
-    fontSize: 14,
-    color: "#6b7280",
-    fontWeight: "500",
+    fontSize: 12,
+    color: "#64748b",
+    textAlign: "center",
   },
-  completeIndicator: {
+  statsContainer: {
+    marginBottom: 12,
+  },
+  statItem: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#d1fae5",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    marginBottom: 6,
   },
-  completeText: {
-    fontSize: 12,
-    color: "#065f46",
+  statIcon: {
+    marginRight: 8,
+  },
+  statLabel: {
+    fontSize: 13,
+    color: "#64748b",
+    flex: 1,
+  },
+  statValue: {
+    fontSize: 13,
     fontWeight: "600",
-    marginLeft: 4,
+    color: "#1e293b",
   },
-  additionalStats: {
+  statusMessage: {
+    flexDirection: "row",
     alignItems: "center",
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#f1f5f9",
+    padding: 8,
+    borderRadius: 8,
   },
-  additionalStatsText: {
+  statusText: {
     fontSize: 12,
-    color: "#0ea5e9",
     fontWeight: "500",
+    marginLeft: 6,
   },
 });
 
