@@ -136,39 +136,34 @@ const UploadScreen = ({ navigation, route }) => {
   // -----------------------------------------------------
   useEffect(() => {
     const checkSubmissionStatus = async () => {
-      setIsLoading(true);
+      setIsLoading(true); // 1. เริ่ม Loading
       const currentUser = auth.currentUser;
       if (!currentUser) {
         setIsLoading(false);
         return;
       }
-
-      // ***** แก้ไขส่วนที่ 1: ดึง Config อย่างปลอดภัย *****
-      let currentConfig = appConfig;
-      if (!currentConfig) {
-        const configDoc = await getDoc(doc(db, "DocumentService", "config"));
-        currentConfig =
-          configDoc && configDoc.exists()
-            ? configDoc.data()
-            : { academicYear: "2567", term: "1" };
-      }
-
+      try {
+        
+        // ***** แก้ไขส่วนที่ 1: ดึง Config อย่างปลอดภัย *****
+        let currentConfig = appConfig;
+        if (!currentConfig) {
+            const configDoc = await getDoc(doc(db, "DocumentService", "config"));
+            currentConfig = (configDoc && configDoc.exists()) 
+                ? configDoc.data() 
+                : { academicYear: "2567", term: "1" };
+        }
+      
       // ***** ตรวจสอบ Submission status สำหรับ term ปัจจุบัน *****
-      const termCollectionName = `document_submissions_${
-        currentConfig.academicYear || "2567"
-      }_${currentConfig.term || "1"}`;
-
-      console.log(
-        `🔍 Checking submission for collection: ${termCollectionName}`
-      );
-
+      const termCollectionName = `document_submissions_
+      ${currentConfig.academicYear}_${currentConfig.term}`;
+      
+      console.log(`🔍 Checking submission for collection: ${termCollectionName}`);
+      
       const submissionRef = doc(db, termCollectionName, currentUser.uid);
       const submissionDoc = await getDoc(submissionRef);
-
+      
       if (submissionDoc.exists()) {
-        console.log(
-          "✅ Found existing submission, redirecting to status screen"
-        );
+        console.log("✅ Found existing submission, redirecting to status screen");
         navigation.replace("DocumentStatusScreen", {
           submissionData: submissionDoc.data(),
         });
@@ -184,23 +179,24 @@ const UploadScreen = ({ navigation, route }) => {
 
       if (userSurveyDoc.exists()) {
         const userData = userSurveyDoc.data();
-
+        const surveyData = userData.survey;
+        setSurveyData(surveyData);
+        setSurveyDocId(userSurveyDoc.id);
+        
         // ***** สำหรับเทอม 2/3: ไม่จำเป็นต้องมี survey data *****
-        if (currentConfig.term === "2" || currentConfig.term === "3") {
-          console.log(
-            `🎓 Term ${currentConfig.term}: Setting up without survey requirement`
-          );
-
+        if (currentConfig.term === '2' || currentConfig.term === '3') {
+          console.log(`🎓 Term ${currentConfig.term}: Setting up without survey requirement`);
+          
           // ใช้ข้อมูล birth_date จาก user document
           const birthDateFromUser = userData.birth_date;
           setBirthDate(birthDateFromUser);
-
+          
           if (birthDateFromUser) {
             const age = calculateAge(birthDateFromUser);
             setUserAge(age);
             console.log(`👤 User age calculated: ${age} years`);
           }
-
+          
           // สำหรับเทอม 2/3 ไม่ต้องมี survey data
           setSurveyData({ term: currentConfig.term });
           setSurveyDocId(userSurveyDoc.id);
@@ -208,13 +204,13 @@ const UploadScreen = ({ navigation, route }) => {
           // ***** สำหรับเทอม 1: ต้องมี survey data *****
           const surveyData = userData.survey;
           if (surveyData) {
-            setSurveyData({ ...surveyData, term: currentConfig.term });
+            setSurveyData(surveyData);
             setSurveyDocId(userSurveyDoc.id);
-
+            
             // ดึง birth_date จาก survey หรือ user data
             const birthDateData = userData.birth_date;
             setBirthDate(birthDateData);
-
+            
             if (birthDateData) {
               const age = calculateAge(birthDateData);
               setUserAge(age);
@@ -231,7 +227,7 @@ const UploadScreen = ({ navigation, route }) => {
         if (userData.uploads) {
           // Convert old format to new format if needed
           const convertedUploads = {};
-          Object.keys(userData.uploads).forEach((docId) => {
+          Object.keys(userData.uploads).forEach(docId => {
             const upload = userData.uploads[docId];
             if (Array.isArray(upload)) {
               convertedUploads[docId] = upload;
@@ -244,10 +240,8 @@ const UploadScreen = ({ navigation, route }) => {
         }
       } else {
         // ไม่พบข้อมูล user
-        if (currentConfig.term === "2" || currentConfig.term === "3") {
-          console.log(
-            `🎓 Term ${currentConfig.term}: Creating minimal data without survey requirement`
-          );
+        if (currentConfig.term === '2' || currentConfig.term === '3') {
+          console.log(`🎓 Term ${currentConfig.term}: Creating minimal data without survey requirement`);
           // สำหรับเทอม 2/3 ไม่จำเป็นต้องมี survey data
           setSurveyData({ term: currentConfig.term });
           setSurveyDocId(null);
@@ -257,14 +251,19 @@ const UploadScreen = ({ navigation, route }) => {
           setSurveyDocId(null);
         }
       }
-      setIsLoading(false);
+    } catch (error) {
+          console.error("🚨 Error in checkSubmissionStatus:", error);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     // เรียกใช้เมื่อ appConfig ถูกโหลดแล้ว
     if (appConfig) {
-      checkSubmissionStatus();
+        checkSubmissionStatus();
     }
-  }, [appConfig]);
+    
+  }, [appConfig]); 
 
   // -----------------------------------------------------
   // 3. Document List Generator (สร้างรายการเอกสาร)
