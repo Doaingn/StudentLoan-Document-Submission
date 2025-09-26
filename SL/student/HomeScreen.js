@@ -192,62 +192,56 @@ const HomeScreen = ({ navigation }) => {
     );
   }
 
-    return (
-      <SafeAreaView style={styles.container}>
-        {/* Header with Search Bar and Profile */}
-        <View style={styles.header}>
-          <View style={styles.searchContainer}>
-            <Ionicons
-              name="search"
-              size={20}
-              color="#666"
-              style={styles.searchIcon}
-            />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="ค้นหาข่าวสาร..."
-              value={searchText}
-              onChangeText={setSearchText}
-            />
-          </View>
-          <TouchableOpacity
-            style={styles.profileButton}
-            onPress={() => navigation.navigate("ProfileScreen")}
-          >
-            <Ionicons name="person-circle" size={32} color="#007AFF" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Filter Buttons */}
-        <View style={styles.filterContainer}>
-          <FlatList
-            data={filterOptions}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            renderItem={({ item }) => renderFilterButton(item)}
-            keyExtractor={(item) => item}
-            contentContainerStyle={styles.filterList}
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Header with Search Bar and Profile */}
+      <View style={styles.header}>
+        <View style={styles.searchContainer}>
+          <Ionicons
+            name="search"
+            size={20}
+            color="#666"
+            style={styles.searchIcon}
+          />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="ค้นหาข่าวสาร..."
+            value={searchText}
+            onChangeText={setSearchText}
           />
         </View>
+      </View>
 
-        {/* News List */}
+      {/* Filter Buttons */}
+      <View style={styles.filterContainer}>
         <FlatList
-          data={filteredData}
-          renderItem={renderNewsItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.newsList}
-          refreshing={loading}
-          onRefresh={fetchNewsData}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons name="newspaper-outline" size={60} color="#ccc" />
-              <Text style={styles.emptyText}>ไม่มีข่าวสารที่ตรงกับการค้นหา</Text>
-            </View>
-          }
+          data={filterOptions}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          renderItem={({ item }) => renderFilterButton(item)}
+          keyExtractor={(item) => item}
+          contentContainerStyle={styles.filterList}
         />
-      </SafeAreaView>
-    );
-  };
+      </View>
+
+      {/* News List */}
+      <FlatList
+        data={filteredData}
+        renderItem={renderNewsItem}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.newsList}
+        refreshing={loading}
+        onRefresh={fetchNewsData}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Ionicons name="newspaper-outline" size={60} color="#ccc" />
+            <Text style={styles.emptyText}>ไม่มีข่าวสารที่ตรงกับการค้นหา</Text>
+          </View>
+        }
+      />
+    </SafeAreaView>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -280,7 +274,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0f0f0",
     borderRadius: 20,
     paddingHorizontal: 12,
-    marginRight: 12,
   },
   searchIcon: {
     marginRight: 8,
