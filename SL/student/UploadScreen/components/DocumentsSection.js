@@ -1,5 +1,4 @@
-// components/DocumentsSection.js - Updated with AI validation support
-import React from "react";
+// components/DocumentsSection.js - Updated with Term 2/3 support and AI validation
 import {
   View,
   Text,
@@ -21,14 +20,59 @@ const DocumentsSection = ({
   isValidatingAI = {},
   aiBackendAvailable = false,
   isConvertingToPDF = {},
+  term = '1', // เพิ่ม term prop
 }) => {
-  // เอกสารที่มี AI validation
-  const AI_ENABLED_DOCUMENTS = [
-    "form_101",
-    "consent_student_form", 
-    "consent_father_form",
-    "consent_mother_form",
-  ];
+  // เอกสารที่มี AI validation แตกต่างกันตาม term
+  const getAIEnabledDocuments = () => {
+    switch(term) {
+      case '1':
+        return [
+          "form_101",
+          "consent_student_form", 
+          "consent_father_form",
+          "consent_mother_form",
+          "id_copies_student",
+          "id_copies_father",
+          "id_copies_mother",
+        ];
+      case '2':
+      case '3':
+        return [
+          "borrower_id_card",
+          "guardian_id_card",
+        ];
+      default:
+        return [];
+    }
+  };
+
+  const AI_ENABLED_DOCUMENTS = getAIEnabledDocuments();
+
+  // เอกสารที่สามารถ generate ได้แตกต่างกันตาม term
+  const getGeneratableDocuments = () => {
+    switch(term) {
+      case '1':
+        return [
+          "form_101",
+          "consent_student_form",
+          "consent_father_form",
+          "consent_mother_form",
+          "guardian_income_cert",
+          "father_income_cert",
+          "mother_income_cert",
+          "single_parent_income_cert",
+          "famo_income_cert",
+          "family_status_cert",
+        ];
+      case '2':
+      case '3':
+        return []; // เทอม 2/3 ไม่มี template ให้ generate
+      default:
+        return [];
+    }
+  };
+
+  const GENERATABLE_DOCUMENTS = getGeneratableDocuments();
 
   const renderDocumentActions = (doc) => {
     const docFiles = uploads[doc.id] || [];
@@ -86,19 +130,8 @@ const DocumentsSection = ({
             <Ionicons name="cloud-upload-outline" size={16} color="#2563eb" />
             <Text style={styles.uploadButtonText}>อัปโหลด</Text>
           </TouchableOpacity>
-          {/* Download button for generated forms */}
-          {[
-            "form_101",
-            "consent_student_form",
-            "consent_father_form",
-            "consent_mother_form",
-            "guardian_income_cert",
-            "father_income_cert",
-            "mother_income_cert",
-            "single_parent_income_cert",
-            "famo_income_cert",
-            "family_status_cert",
-          ].includes(doc.id) && (
+          {/* Download button for generated forms - เฉพาะเทอม 1 */}
+          {GENERATABLE_DOCUMENTS.includes(doc.id) && (
             <TouchableOpacity
               style={styles.downloadButton}
               onPress={() => onDownloadDocument(doc.id)}
@@ -169,27 +202,54 @@ const DocumentsSection = ({
   };
 
   const renderAIValidationBadge = (doc, file) => {
-    // AI validation badge for Form 101 files
-    if (doc.id === "form_101" && file.aiValidated) {
-      return (
-        <View style={styles.aiValidatedBadge}>
-          <Ionicons name="sparkles" size={10} color="#8b5cf6" />
-          <Text style={styles.aiValidatedText}>AI ตรวจสอบแล้ว</Text>
-        </View>
-      );
-    }
+    // AI validation badge for different document types based on term
+    if (term === '1') {
+      // Term 1 AI validation badges
+      if (doc.id === "form_101" && file.aiValidated) {
+        return (
+          <View style={styles.aiValidatedBadge}>
+            <Ionicons name="sparkles" size={10} color="#8b5cf6" />
+            <Text style={styles.aiValidatedText}>AI ตรวจสอบแล้ว</Text>
+          </View>
+        );
+      }
 
-    // AI validation badge for consent form files
-    if (
-      ["consent_student_form", "consent_father_form", "consent_mother_form"].includes(doc.id) && 
-      file.aiValidated
-    ) {
-      return (
-        <View style={styles.consentAiValidatedBadge}>
-          <Ionicons name="shield-checkmark" size={10} color="#059669" />
-          <Text style={styles.consentAiValidatedText}>ยินยอม AI ตรวจสอบแล้ว</Text>
-        </View>
-      );
+      if (
+        ["consent_student_form", "consent_father_form", "consent_mother_form"].includes(doc.id) && 
+        file.aiValidated
+      ) {
+        return (
+          <View style={styles.consentAiValidatedBadge}>
+            <Ionicons name="shield-checkmark" size={10} color="#059669" />
+            <Text style={styles.consentAiValidatedText}>ยินยอม AI ตรวจสอบแล้ว</Text>
+          </View>
+        );
+      }
+
+      if (
+        ["id_copies_student", "id_copies_father", "id_copies_mother"].includes(doc.id) && 
+        file.aiValidated
+      ) {
+        return (
+          <View style={styles.idAiValidatedBadge}>
+            <Ionicons name="card" size={10} color="#dc2626" />
+            <Text style={styles.idAiValidatedText}>บัตร AI ตรวจสอบแล้ว</Text>
+          </View>
+        );
+      }
+    } else if (term === '2' || term === '3') {
+      // Term 2/3 AI validation badges
+      if (
+        ["borrower_id_card", "guardian_id_card"].includes(doc.id) && 
+        file.aiValidated
+      ) {
+        return (
+          <View style={styles.idAiValidatedBadge}>
+            <Ionicons name="card" size={10} color="#dc2626" />
+            <Text style={styles.idAiValidatedText}>บัตร AI ตรวจสอบแล้ว</Text>
+          </View>
+        );
+      }
     }
 
     // Show converted from image badge
@@ -254,22 +314,45 @@ const DocumentsSection = ({
   };
 
   const getAIBadgeForDocument = (docId) => {
-    if (docId === "form_101") {
-      return (
-        <View style={styles.aiBadge}>
-          <Ionicons name="sparkles-outline" size={12} color="#8b5cf6" />
-          <Text style={styles.aiBadgeText}>AI ตรวจสอบ</Text>
-        </View>
-      );
-    }
+    if (AI_ENABLED_DOCUMENTS.includes(docId)) {
+      // Different AI badge styles for different document types
+      if (term === '1') {
+        if (docId === "form_101") {
+          return (
+            <View style={styles.aiBadge}>
+              <Ionicons name="sparkles-outline" size={12} color="#8b5cf6" />
+              <Text style={styles.aiBadgeText}>AI ตรวจสอบ</Text>
+            </View>
+          );
+        }
 
-    if (["consent_student_form", "consent_father_form", "consent_mother_form"].includes(docId)) {
-      return (
-        <View style={[styles.aiBadge, styles.consentAiBadge]}>
-          <Ionicons name="shield-checkmark-outline" size={12} color="#059669" />
-          <Text style={[styles.aiBadgeText, styles.consentAiBadgeText]}>ยินยอม AI</Text>
-        </View>
-      );
+        if (["consent_student_form", "consent_father_form", "consent_mother_form"].includes(docId)) {
+          return (
+            <View style={[styles.aiBadge, styles.consentAiBadge]}>
+              <Ionicons name="shield-checkmark-outline" size={12} color="#059669" />
+              <Text style={[styles.aiBadgeText, styles.consentAiBadgeText]}>ยินยอม AI</Text>
+            </View>
+          );
+        }
+
+        if (["id_copies_student", "id_copies_father", "id_copies_mother"].includes(docId)) {
+          return (
+            <View style={[styles.aiBadge, styles.idAiBadge]}>
+              <Ionicons name="card-outline" size={12} color="#dc2626" />
+              <Text style={[styles.aiBadgeText, styles.idAiBadgeText]}>บัตร AI</Text>
+            </View>
+          );
+        }
+      } else if (term === '2' || term === '3') {
+        if (["borrower_id_card", "guardian_id_card"].includes(docId)) {
+          return (
+            <View style={[styles.aiBadge, styles.idAiBadge]}>
+              <Ionicons name="card-outline" size={12} color="#dc2626" />
+              <Text style={[styles.aiBadgeText, styles.idAiBadgeText]}>บัตร AI</Text>
+            </View>
+          );
+        }
+      }
     }
 
     return null;
@@ -282,9 +365,22 @@ const DocumentsSection = ({
     const docFiles = uploads[doc.id] || [];
     if (docFiles.length === 0) return null;
 
-    const warningText = doc.id === "form_101" 
-      ? "AI ไม่พร้อมใช้งาน"
-      : "AI ตรวจสอบยินยอมไม่พร้อมใช้งาน";
+    let warningText = "AI ไม่พร้อมใช้งาน";
+    
+    // Different warning messages based on document type and term
+    if (term === '1') {
+      if (doc.id === "form_101") {
+        warningText = "AI ตรวจสอบฟอร์มไม่พร้อมใช้งาน";
+      } else if (["consent_student_form", "consent_father_form", "consent_mother_form"].includes(doc.id)) {
+        warningText = "AI ตรวจสอบยินยอมไม่พร้อมใช้งาน";
+      } else if (["id_copies_student", "id_copies_father", "id_copies_mother"].includes(doc.id)) {
+        warningText = "AI ตรวจสอบบัตรประชาชนไม่พร้อมใช้งาน";
+      }
+    } else if (term === '2' || term === '3') {
+      if (["borrower_id_card", "guardian_id_card"].includes(doc.id)) {
+        warningText = "AI ตรวจสอบบัตรประชาชนไม่พร้อมใช้งาน";
+      }
+    }
 
     return (
       <View style={styles.aiUnavailableBadge}>
@@ -294,11 +390,20 @@ const DocumentsSection = ({
     );
   };
 
+  const getSectionTitle = () => {
+    switch(term) {
+      case '1': return 'รายการเอกสารสำหรับการสมัคร';
+      case '2': return 'รายการเอกสารสำหรับการเบิกเงินกู้ยืม เทอม 2';
+      case '3': return 'รายการเอกสารสำหรับการเบิกเงินกู้ยืม เทอม 3';
+      default: return 'รายการเอกสาร';
+    }
+  };
+
   return (
     <View style={styles.documentsSection}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>รายการเอกสาร</Text>
-        {!aiBackendAvailable && (
+        <Text style={styles.sectionTitle}>{getSectionTitle()}</Text>
+        {!aiBackendAvailable && AI_ENABLED_DOCUMENTS.length > 0 && (
           <View style={styles.aiStatusWarning}>
             <Ionicons name="warning-outline" size={16} color="#f59e0b" />
             <Text style={styles.aiStatusText}>
@@ -466,6 +571,13 @@ const styles = StyleSheet.create({
   consentAiBadgeText: {
     color: "#059669",
   },
+  idAiBadge: {
+    backgroundColor: "#fef2f2",
+    borderColor: "#dc2626",
+  },
+  idAiBadgeText: {
+    color: "#dc2626",
+  },
   documentDescription: {
     fontSize: 13,
     color: "#64748b",
@@ -587,6 +699,21 @@ const styles = StyleSheet.create({
   consentAiValidatedText: {
     fontSize: 9,
     color: "#065f46",
+    fontWeight: "600",
+    marginLeft: 2,
+  },
+  idAiValidatedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fee2e2",
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginTop: 4,
+  },
+  idAiValidatedText: {
+    fontSize: 9,
+    color: "#991b1b",
     fontWeight: "600",
     marginLeft: 2,
   },
