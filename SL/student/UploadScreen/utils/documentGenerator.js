@@ -1,4 +1,4 @@
-// documentGenerator.js - Document list generator and handler (Updated for Term 2 & 3 support)
+// documentGenerator.js - Document list generator and handler (Updated for Term 2 & 3 support, and AI validation)
 import { Alert, Linking } from "react-native";
 import { InsertForm101 } from "../../documents/InsertForm101";
 import { ConsentFrom_student } from "../../documents/ConsentFrom_student";
@@ -8,11 +8,16 @@ import { Income102 } from "../../documents/income102";
 import { FamStatus_cert } from "../../documents/FamStatus_cert";
 
 // -----------------------------------------------------
-// 1. Utility: คำนวดอายุจาก Firebase Timestamp 
+// 1. Utility: คำนวณอายุจาก Firebase Timestamp
 // -----------------------------------------------------
+/**
+ * คำนวณอายุจาก Firebase Timestamp object หรือ Unix timestamp
+ * @param {import('@firebase/firestore').Timestamp | number | Date | null} birthDateTimestamp - วันเกิดในรูปแบบ Firebase Timestamp, Unix timestamp (ms) หรือ Date object
+ * @returns {number | null} อายุเป็นปี หรือ null ถ้าข้อมูลไม่ถูกต้อง
+ */
 const calculateAge = (birthDateTimestamp) => {
     if (!birthDateTimestamp) return null;
-    
+
     // ตรวจสอบและแปลงจาก Firebase Timestamp object หรือ Unix timestamp (milliseconds)
     let birthDate;
     if (typeof birthDateTimestamp.toDate === 'function') {
@@ -23,13 +28,13 @@ const calculateAge = (birthDateTimestamp) => {
         birthDate = birthDateTimestamp;
     } else {
         console.warn('Invalid birth date format:', birthDateTimestamp);
-        return null; 
+        return null;
     }
 
     const today = new Date();
     let age = today.getFullYear() - birthDate.getFullYear();
     const m = today.getMonth() - birthDate.getMonth();
-    
+
     // ปรับอายุถ้าวันเกิดยังไม่ถึง
     if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
         age--;
@@ -37,19 +42,24 @@ const calculateAge = (birthDateTimestamp) => {
     return age;
 };
 
-export { calculateAge }; 
+export { calculateAge };
 
 // -----------------------------------------------------
 // 2. Logic: สร้างรายการเอกสารสำหรับเทอม 2 และ 3
 // -----------------------------------------------------
+/**
+ * สร้างรายการเอกสารสำหรับเทอม 2 และ 3
+ * @param {import('@firebase/firestore').Timestamp | number | Date | null} birthDateTimestamp - วันเกิดในรูปแบบ Timestamp
+ * @returns {Array} Array of document objects
+ */
 const generateTerm2And3Documents = (birthDateTimestamp) => {
     const documents = [];
     const age = calculateAge(birthDateTimestamp);
-    
+
     console.log(`📋 Generating documents for Term 2/3. Calculated age: ${age} years`);
-    
+
     // เอกสารบังคับ 3 รายการหลัก
-    // 1. ใบเบิกเงินกู้ยืม
+    // 1. ใบเบิกเงินกู้ยืม (Disbursement Form)
     documents.push({
         id: "disbursement_form",
         title: "ใบเบิกเงินกู้ยืม",
@@ -60,7 +70,7 @@ const generateTerm2And3Documents = (birthDateTimestamp) => {
         canGenerate: false,
     });
 
-    // 2. ใบภาระค่าใช้จ่ายทุน
+    // 2. ใบภาระค่าใช้จ่ายทุน (Expense Burden Form)
     documents.push({
         id: "expense_burden_form",
         title: "ใบภาระค่าใช้จ่าย",
@@ -71,11 +81,11 @@ const generateTerm2And3Documents = (birthDateTimestamp) => {
         canGenerate: false,
     });
 
-    // 3. สำเนาบัตรประจำตัวประชาชนผู้กู้
+    // 3. สำเนาบัตรประจำตัวประชาชนผู้กู้ (Borrower ID Card)
     documents.push({
-        id: "borrower_id_card",
-        title: "สำเนาบัตรประจำตัวประชาชนผู้กู้",
-        description: "สำเนาบัตรประชาชนของผู้กู้ที่ชัดเจนและรับรองสำเนาถูกต้อง",
+        id: "id_copies_student",
+        title: "สำเนาบัตรประชาชนพร้อมรับรองสำเนาถูกต้องของผู้กู้",
+        description: "บัตรประชาชนต้องไม่หมดอายุ",
         required: true,
         type: "upload",
         needsAIValidation: true,
@@ -86,9 +96,9 @@ const generateTerm2And3Documents = (birthDateTimestamp) => {
     if (age !== null && age < 20) {
         console.log(`👶 Student is under 20 years old (${age}), adding guardian ID card requirement`);
         documents.push({
-            id: "guardian_id_card",
-            title: "สำเนาบัตรประจำตัวประชาชนผู้ปกครอง",
-            description: "สำเนาบัตรประชาชนของผู้ปกครอง (บิดา/มารดา หรือผู้ที่ดูแลตามกฎหมาย) พร้อมรับรองสำเนาถูกต้อง",
+            id: "guardian_id_copies",
+            title: "สำเนาบัตรประชาชนพร้อมรับรองสำเนาถูกต้อง ของผู้ปกครอง",
+            description: "บัตรประชาชนต้องไม่หมดอายุ",
             required: true,
             type: "upload",
             needsAIValidation: true,
@@ -102,20 +112,21 @@ const generateTerm2And3Documents = (birthDateTimestamp) => {
     return documents;
 };
 
+// -----------------------------------------------------
+// 3. Logic: สร้างรายการเอกสารสำหรับเทอม 1 (ปรับปรุงจากโค้ดเก่า)
+// -----------------------------------------------------
 /**
- * Generate documents list based on survey data
+ * สร้างรายการเอกสารสำหรับเทอม 1
  * @param {Object} data - Survey data from the user
+ * @param {string} data.familyStatus - สถานภาพครอบครัว ("ก", "ข", "ค")
+ * @param {string} data.fatherIncome - รายได้บิดา
+ * @param {string} data.motherIncome - รายได้มารดา
+ * @param {string} data.guardianIncome - รายได้ผู้ปกครอง
+ * @param {string} data.livingWith - อยู่กับใคร (สำหรับ "ข")
+ * @param {string} data.legalStatus - สถานะทางกฎหมาย (มี/ไม่มีเอกสาร)
  * @returns {Array} Array of document objects
  */
-export const generateDocumentsList = ({ term, familyStatus, fatherIncome, motherIncome, guardianIncome, birth_date }) => {
-    
-    // ***** Logic ใหม่สำหรับ เทอม 2 และ 3 *****
-    if (term === '2' || term === '3') {
-        console.log(`🎓 Generating documents for Term ${term}`);
-        return generateTerm2And3Documents(birth_date);
-    }
-    
-    // ***** Logic เดิมสำหรับ เทอม 1 *****
+const generateTerm1Documents = ({ familyStatus, fatherIncome, motherIncome, guardianIncome, livingWith, legalStatus }) => {
     console.log(`🎓 Generating documents for Term 1`);
     const documents = [];
 
@@ -157,7 +168,7 @@ export const generateDocumentsList = ({ term, familyStatus, fatherIncome, mother
 
     // Documents based on family status (Term 1 logic)
     if (familyStatus === "ก") {
-        // Both parents alive - add parent documents
+        // Both parents alive
         documents.push(
             {
                 id: "consent_father_form",
@@ -202,6 +213,7 @@ export const generateDocumentsList = ({ term, familyStatus, fatherIncome, mother
                     description: "กรอกข้อมูลตามจริงให้ครบถ้วน ก่อนอัพโหลดเอกสาร",
                     required: true,
                     canGenerate: true,
+                    needsAIValidation: false,
                 },
                 {
                     id: "famo_id_copies_gov",
@@ -209,6 +221,7 @@ export const generateDocumentsList = ({ term, familyStatus, fatherIncome, mother
                     description: "สำหรับรับรองรายได้ เอกสารจัดทำในปี พ.ศ. 2568 เท่านั้น",
                     required: true,
                     canGenerate: false,
+                    needsAIValidation: false,
                 }
             );
         } else {
@@ -220,6 +233,7 @@ export const generateDocumentsList = ({ term, familyStatus, fatherIncome, mother
                     description: "เอกสารอายุไม่เกิน 3 เดือน",
                     required: true,
                     canGenerate: false,
+                    needsAIValidation: false,
                 });
             } else {
                 documents.push(
@@ -229,6 +243,7 @@ export const generateDocumentsList = ({ term, familyStatus, fatherIncome, mother
                         description: "กรอกข้อมูลตามจริงให้ครบถ้วน ก่อนอัพโหลดเอกสาร",
                         required: true,
                         canGenerate: true,
+                        needsAIValidation: false,
                     },
                     {
                         id: "fa_id_copies_gov",
@@ -236,6 +251,7 @@ export const generateDocumentsList = ({ term, familyStatus, fatherIncome, mother
                         description: "สำหรับรับรองรายได้ เอกสารจัดทำในปี พ.ศ. 2568 เท่านั้น",
                         required: true,
                         canGenerate: false,
+                        needsAIValidation: false,
                     }
                 );
             }
@@ -247,6 +263,7 @@ export const generateDocumentsList = ({ term, familyStatus, fatherIncome, mother
                     description: "เอกสารอายุไม่เกิน 3 เดือน",
                     required: true,
                     canGenerate: false,
+                    needsAIValidation: false,
                 });
             } else {
                 documents.push(
@@ -256,6 +273,7 @@ export const generateDocumentsList = ({ term, familyStatus, fatherIncome, mother
                         description: "กรอกข้อมูลตามจริงให้ครบถ้วน ก่อนอัพโหลดเอกสาร",
                         required: true,
                         canGenerate: true,
+                        needsAIValidation: false,
                     },
                     {
                         id: "ma_id_copies_gov",
@@ -263,14 +281,16 @@ export const generateDocumentsList = ({ term, familyStatus, fatherIncome, mother
                         description: "สำหรับรับรองรายได้ เอกสารจัดทำในปี พ.ศ. 2568 เท่านั้น",
                         required: true,
                         canGenerate: false,
+                        needsAIValidation: false,
                     }
                 );
             }
         }
     } else if (familyStatus === "ข") {
-        // Single parent logic (existing code)
-        let parent = familyStatus.livingWith === "บิดา" ? "บิดา" : "มารดา";
-        let consentFormId = familyStatus.livingWith === "บิดา" ? "consent_father_form" : "consent_mother_form";
+        // Single parent
+        const parent = livingWith === "บิดา" ? "บิดา" : "มารดา";
+        const consentFormId = livingWith === "บิดา" ? "consent_father_form" : "consent_mother_form";
+        const idCopiesId = livingWith === "บิดา" ? "id_copies_father" : "id_copies_mother";
 
         documents.push(
             {
@@ -279,26 +299,202 @@ export const generateDocumentsList = ({ term, familyStatus, fatherIncome, mother
                 description: "กรอกข้อมูลตามจริงให้ครบถ้วน ก่อนอัพโหลดเอกสาร",
                 required: true,
                 canGenerate: true,
+                needsAIValidation: true, // Assuming this parent consent needs validation
             },
             {
-                id: `id_copies_${consentFormId}`,
+                id: idCopiesId,
                 title: `สำเนาบัตรประชาชนพร้อมรับรองสำเนาถูกต้องของ ${parent}`,
                 description: "บัตรประชาชนต้องไม่หมดอายุ",
                 required: true,
                 canGenerate: false,
+                needsAIValidation: true, // Assuming this parent ID needs validation
             }
         );
 
-        // Additional documents for single parent (existing logic continues...)
-        // ... (rest of single parent logic)
+        // Legal status documents
+        if (legalStatus === "มีเอกสาร") {
+            documents.push({
+                id: "legal_status",
+                title: "สำเนาใบหย่า (กรณีหย่าร้าง) หรือ สำเนาใบมรณบัตร (กรณีเสียชีวิต)",
+                required: true,
+                canGenerate: false,
+                needsAIValidation: false,
+            });
+        } else {
+            documents.push(
+                {
+                    id: "family_status_cert",
+                    title: "หนังสือรับรองสถานภาพครอบครัว",
+                    description: "กรอกข้อมูลตามจริงให้ครบถ้วน ก่อนอัพโหลดเอกสาร",
+                    required: true,
+                    canGenerate: true,
+                    needsAIValidation: false,
+                },
+                {
+                    id: "fam_id_copies_gov",
+                    title: "สำเนาบัตรข้าราชการผู้รับรอง",
+                    description: "สำหรับรับรองสถานภาพครอบครัว เอกสารจัดทำในปี พ.ศ. 2568 เท่านั้น",
+                    required: true,
+                    canGenerate: false,
+                    needsAIValidation: false,
+                }
+            );
+        }
+
+        // Income documents for single parent
+        const hasIncome =
+            (livingWith === "บิดา" && fatherIncome === "มีรายได้ประจำ") ||
+            (livingWith === "มารดา" && motherIncome === "มีรายได้ประจำ");
+        const singleParentIncome = livingWith === "บิดา" ? fatherIncome : motherIncome;
+
+        if (singleParentIncome === "มีรายได้ประจำ") {
+            documents.push({
+                id: "single_parent_income",
+                title: `หนังสือรับรองเงินเดือน หรือ สลิปเงินเดือน ของ${parent}`,
+                description: "เอกสารอายุไม่เกิน 3 เดือน",
+                required: true,
+                canGenerate: false,
+                needsAIValidation: false,
+            });
+        } else {
+            documents.push(
+                {
+                    id: "single_parent_income_cert",
+                    title: `หนังสือรับรองรายได้ กยศ. 102 ของ${parent}`,
+                    description: "กรอกข้อมูลตามจริงให้ครบถ้วน ก่อนอัพโหลดเอกสาร",
+                    required: true,
+                    canGenerate: true,
+                    needsAIValidation: false,
+                },
+                {
+                    id: "102_id_copies_gov",
+                    title: "สำเนาบัตรข้าราชการผู้รับรอง",
+                    description: `สำหรับรับรองรายได้ของ${parent} เอกสารจัดทำในปี พ.ศ. 2568 เท่านั้น`,
+                    required: true,
+                    canGenerate: false,
+                    needsAIValidation: false,
+                }
+            );
+        }
     } else if (familyStatus === "ค") {
-        // Guardian logic (existing code)
-        // ... (rest of guardian logic)
+        // Guardian
+        documents.push(
+            {
+                id: "guardian_consent",
+                title: "หนังสือยินยอมเปิดเผยข้อมูล ของผู้ปกครอง",
+                description: "กรอกข้อมูลตามจริงให้ครบถ้วน ก่อนอัพโหลดเอกสาร",
+                required: true,
+                canGenerate: false, // Assuming no generate template for guardian consent
+                needsAIValidation: false,
+            },
+            {
+                id: "guardian_id_copies",
+                title: "สำเนาบัตรประชาชนพร้อมรับรองสำเนาถูกต้อง ของผู้ปกครอง",
+                description: "บัตรประชาชนต้องไม่หมดอายุ",
+                required: true,
+                canGenerate: false,
+                needsAIValidation: true, // Assuming guardian ID needs validation
+            }
+        );
+
+        if (guardianIncome === "มีรายได้ประจำ") {
+            documents.push({
+                id: "guardian_income",
+                title: "หนังสือรับรองเงินเดือน หรือ สลิปเงินเดือน ของผู้ปกครอง",
+                description: "เอกสารอายุไม่เกิน 3 เดือน",
+                required: true,
+                canGenerate: false,
+                needsAIValidation: false,
+            });
+        } else {
+            documents.push(
+                {
+                    id: "guardian_income_cert",
+                    title: "หนังสือรับรองรายได้ กยศ. 102 ของผู้ปกครอง",
+                    description: "กรอกข้อมูลตามจริงให้ครบถ้วน ก่อนอัพโหลดเอกสาร",
+                    required: true,
+                    canGenerate: true,
+                    needsAIValidation: false,
+                },
+                {
+                    id: "guar_id_copies_gov",
+                    title: "สำเนาบัตรข้าราชการผู้รับรอง",
+                    description: "สำหรับรับรองรายได้ เอกสารจัดทำในปี พ.ศ. 2568 เท่านั้น",
+                    required: true,
+                    canGenerate: false,
+                    needsAIValidation: false,
+                }
+            );
+        }
+
+        if (legalStatus === "มีเอกสาร") {
+            documents.push({
+                id: "legal_status",
+                title: "สำเนาใบหย่า (กรณีหย่าร้าง) หรือ สำเนาใบมรณบัตร (กรณีเสียชีวิต)",
+                description: "",
+                required: true,
+                canGenerate: false,
+                needsAIValidation: false,
+            });
+        }
+
+        // ต้องมีหนังสือรับรองสถานภาพครอบครัวสำหรับผู้ปกครองเสมอ (ตามโค้ดเก่า)
+        documents.push(
+            {
+                id: "family_status_cert",
+                title: "หนังสือรับรองสถานภาพครอบครัว",
+                description: "กรอกข้อมูลตามจริงให้ครบถ้วน ก่อนอัพโหลดเอกสาร",
+                required: true,
+                canGenerate: true,
+                needsAIValidation: false,
+            },
+            {
+                id: "fam_id_copies_gov",
+                title: "สำเนาบัตรข้าราชการผู้รับรอง",
+                description: "สำหรับรับรองสถานภาพครอบครัว เอกสารจัดทำในปี พ.ศ. 2568 เท่านั้น",
+                required: true,
+                canGenerate: false,
+                needsAIValidation: false,
+            }
+        );
     }
 
     return documents;
 };
 
+
+// -----------------------------------------------------
+// 4. Main Export: generateDocumentsList (รวม Logic เทอม 1, 2, 3)
+// -----------------------------------------------------
+/**
+ * Generate documents list based on survey data
+ * @param {Object} data - Survey data from the user
+ * @param {string} data.term - เทอมการศึกษา ("1", "2", "3")
+ * @param {string} data.familyStatus - สถานภาพครอบครัว ("ก", "ข", "ค")
+ * @param {string} data.fatherIncome - รายได้บิดา
+ * @param {string} data.motherIncome - รายได้มารดา
+ * @param {string} data.guardianIncome - รายได้ผู้ปกครอง
+ * @param {import('@firebase/firestore').Timestamp | number | Date} data.birth_date - วันเกิดของผู้กู้
+ * @returns {Array} Array of document objects
+ */
+export const generateDocumentsList = (data) => {
+    if (!data) return [];
+    
+    const { term, familyStatus, fatherIncome, motherIncome, guardianIncome, birth_date, livingWith, legalStatus } = data;
+
+    // ***** Logic ใหม่สำหรับ เทอม 2 และ 3 *****
+    if (term === '2' || term === '3') {
+        return generateTerm2And3Documents(birth_date);
+    }
+
+    // ***** Logic เดิมสำหรับ เทอม 1 *****
+    return generateTerm1Documents({ familyStatus, fatherIncome, motherIncome, guardianIncome, livingWith, legalStatus });
+};
+
+
+// -----------------------------------------------------
+// 5. Document Download Handler
+// -----------------------------------------------------
 /**
  * Handle document download based on document type
  * @param {string} docId - Document ID
@@ -315,7 +511,7 @@ export const handleDownloadDocument = (docId, downloadUrl = null) => {
         ConsentFrom_mother();
     } else if ([
         "guardian_income_cert",
-        "father_income_cert", 
+        "father_income_cert",
         "mother_income_cert",
         "single_parent_income_cert",
         "famo_income_cert"
@@ -328,11 +524,14 @@ export const handleDownloadDocument = (docId, downloadUrl = null) => {
             Alert.alert("ไม่สามารถดาวน์โหลดไฟล์ได้")
         );
     } else {
-        // สำหรับเอกสารเทอม 2/3 ที่ไม่มี template
+        // สำหรับเอกสารที่ไม่มี template และไม่มี downloadUrl (เช่น เอกสารเทอม 2/3 ส่วนใหญ่)
         Alert.alert("ไม่พบไฟล์", "เอกสารนี้ไม่มีแบบฟอร์มให้ดาวน์โหลด กรุณาดาวน์โหลดจากแหล่งอื่นหรือสร้างขึ้นเอง");
     }
 };
 
+// -----------------------------------------------------
+// 6. Utility Functions (Generatable/AI Validation)
+// -----------------------------------------------------
 /**
  * Get list of document IDs that can generate forms
  * @returns {Array} Array of document IDs that have downloadable forms
@@ -342,7 +541,7 @@ export const getGeneratableDocuments = () => {
         // เทอม 1 documents ที่มี template
         "form_101",
         "consent_student_form",
-        "consent_father_form", 
+        "consent_father_form",
         "consent_mother_form",
         "guardian_income_cert",
         "father_income_cert",
@@ -354,7 +553,7 @@ export const getGeneratableDocuments = () => {
 };
 
 /**
- * Check if a document can be generated/downloaded  
+ * Check if a document can be generated/downloaded
  * @param {string} docId - Document ID to check
  * @returns {boolean} True if document can be generated
  */
@@ -374,9 +573,9 @@ export const getAIValidationDocuments = () => {
         "consent_father_form",
         "consent_mother_form",
         "id_copies_student",
-        "id_copies_father", 
+        "id_copies_father",
         "id_copies_mother",
-        
+
         // เทอม 2/3
         "borrower_id_card",
         "guardian_id_card"
