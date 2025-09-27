@@ -14,6 +14,8 @@ import {
   setDoc,
   onSnapshot,
   deleteField,
+  collection,
+  addDoc, // เพิ่มสำหรับเก็บ AI validation results
 } from "firebase/firestore";
 import { storage } from "../../database/firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
@@ -97,6 +99,123 @@ const UploadScreen = ({ navigation, route }) => {
     checkAIStatus();
   }, []);
 
+  // ฟังก์ชันใหม่สำหรับเก็บผลการตรวจสอบ AI
+  const saveAIValidationResult = async (validationData) => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        console.error("No authenticated user found");
+        return null;
+      }
+
+      // สร้าง validation result object
+      const validationResult = {
+        userId: currentUser.uid,
+        userEmail: currentUser.email,
+        documentType: validationData.documentType,
+        fileName: validationData.fileName,
+        fileUri: validationData.fileUri, // อาจไม่ต้องเก็บ URI สำหรับความปลอดภัย
+        mimeType: validationData.mimeType,
+        validatedAt: new Date().toISOString(),
+        
+        // ข้อมูลผลการตรวจสอบ AI
+        aiResult: {
+          isValid: validationData.aiResult.isValid || false,
+          confidence: validationData.aiResult.confidence || 0,
+          overall_status: validationData.aiResult.overall_status || 'unknown',
+          
+          // ข้อมูลที่แยกออกได้จากเอกสาร
+          extractedData: validationData.aiResult.extractedData || {},
+          
+          // ข้อมูลการรับรองสำเนา (สำหรับ ID Card)
+          certificationInfo: validationData.aiResult.certificationInfo || {},
+          
+          // ข้อมูลคุณภาพเอกสาร
+          imageQuality: validationData.aiResult.imageQuality || 'unknown',
+          
+          // ปัญหาที่พบ
+          qualityIssues: validationData.aiResult.qualityIssues || [],
+          
+          // คำแนะนำ
+          recommendations: validationData.aiResult.recommendations || [],
+          
+          // ข้อมูลเฉพาะตามประเภทเอกสาร
+          documentSpecificData: validationData.aiResult.documentSpecificData || {},
+          
+          // สำหรับเอกสารจิตอาสา
+          ...(validationData.documentType === 'volunteer_doc' && {
+            accumulatedHours: validationData.aiResult.accumulatedHours || 0,
+            volunteerActivities: validationData.aiResult.volunteerActivities || []
+          }),
+          
+          // ข้อมูล AI backend ที่ใช้
+          aiBackendInfo: {
+            method: validationData.aiBackendInfo?.method || 'unknown',
+            model: validationData.aiBackendInfo?.model || 'unknown',
+            backendUrl: validationData.aiBackendInfo?.backendUrl || null
+          }
+        },
+        
+        // ข้อมูล academic context
+        academicYear: appConfig?.academicYear || null,
+        term: appConfig?.term || null,
+        
+        // สถานะการใช้งาน
+        userAction: 'accepted', // ผู้ใช้เลือก "ใช้ไฟล์นี้"
+        
+        // Metadata
+        metadata: {
+          appVersion: '1.0.0', // เพิ่ม version ของแอป
+          platform: 'react-native',
+          validationTimestamp: Date.now()
+        }
+      };
+
+      // เก็บลงใน collection "ai_validation_results"
+      const validationRef = await addDoc(
+        collection(db, "ai_validation_results"), 
+        validationResult
+      );
+
+      console.log("✅ AI validation result saved with ID:", validationRef.id);
+      
+      // อัพเดตข้อมูลในเอกสาร user ด้วย (เก็บ reference)
+      const userRef = doc(db, "users", currentUser.uid);
+      const userDoc = await getDoc(userRef);
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const aiValidations = userData.aiValidations || [];
+        
+        // เพิ่ม reference ใหม่
+        aiValidations.push({
+          validationId: validationRef.id,
+          documentType: validationData.documentType,
+          fileName: validationData.fileName,
+          validatedAt: new Date().toISOString(),
+          status: validationData.aiResult.overall_status
+        });
+        
+        // เก็บเฉพาะ 50 รายการล่าสุด เพื่อไม่ให้เอกสาร user ใหญ่เกินไป
+        if (aiValidations.length > 50) {
+          aiValidations.splice(0, aiValidations.length - 50);
+        }
+        
+        await updateDoc(userRef, {
+          aiValidations: aiValidations,
+          lastAIValidation: new Date().toISOString()
+        });
+      }
+      
+      return validationRef.id;
+      
+    } catch (error) {
+      console.error("❌ Error saving AI validation result:", error);
+      // ไม่ให้ error นี้ขัดขวางการทำงานหลัก
+      return null;
+    }
+  };
+
   // -----------------------------------------------------
   // 1. Config Listener (Term และ Academic Year)
   // -----------------------------------------------------
@@ -136,34 +255,39 @@ const UploadScreen = ({ navigation, route }) => {
   // -----------------------------------------------------
   useEffect(() => {
     const checkSubmissionStatus = async () => {
-      setIsLoading(true); // 1. เริ่ม Loading
+      setIsLoading(true);
       const currentUser = auth.currentUser;
       if (!currentUser) {
         setIsLoading(false);
         return;
       }
-      try {
-        
-        // ***** แก้ไขส่วนที่ 1: ดึง Config อย่างปลอดภัย *****
-        let currentConfig = appConfig;
-        if (!currentConfig) {
-            const configDoc = await getDoc(doc(db, "DocumentService", "config"));
-            currentConfig = (configDoc && configDoc.exists()) 
-                ? configDoc.data() 
-                : { academicYear: "2567", term: "1" };
-        }
-      
+
+      // ***** แก้ไขส่วนที่ 1: ดึง Config อย่างปลอดภัย *****
+      let currentConfig = appConfig;
+      if (!currentConfig) {
+        const configDoc = await getDoc(doc(db, "DocumentService", "config"));
+        currentConfig =
+          configDoc && configDoc.exists()
+            ? configDoc.data()
+            : { academicYear: "2567", term: "1" };
+      }
+
       // ***** ตรวจสอบ Submission status สำหรับ term ปัจจุบัน *****
-      const termCollectionName = `document_submissions_
-      ${currentConfig.academicYear}_${currentConfig.term}`;
-      
-      console.log(`🔍 Checking submission for collection: ${termCollectionName}`);
-      
+      const termCollectionName = `document_submissions_${
+        currentConfig.academicYear || "2567"
+      }_${currentConfig.term || "1"}`;
+
+      console.log(
+        `🔍 Checking submission for collection: ${termCollectionName}`
+      );
+
       const submissionRef = doc(db, termCollectionName, currentUser.uid);
       const submissionDoc = await getDoc(submissionRef);
-      
+
       if (submissionDoc.exists()) {
-        console.log("✅ Found existing submission, redirecting to status screen");
+        console.log(
+          "✅ Found existing submission, redirecting to status screen"
+        );
         navigation.replace("DocumentStatusScreen", {
           submissionData: submissionDoc.data(),
         });
@@ -179,24 +303,23 @@ const UploadScreen = ({ navigation, route }) => {
 
       if (userSurveyDoc.exists()) {
         const userData = userSurveyDoc.data();
-        const surveyData = userData.survey;
-        setSurveyData(surveyData);
-        setSurveyDocId(userSurveyDoc.id);
-        
+
         // ***** สำหรับเทอม 2/3: ไม่จำเป็นต้องมี survey data *****
-        if (currentConfig.term === '2' || currentConfig.term === '3') {
-          console.log(`🎓 Term ${currentConfig.term}: Setting up without survey requirement`);
-          
+        if (currentConfig.term === "2" || currentConfig.term === "3") {
+          console.log(
+            `🎓 Term ${currentConfig.term}: Setting up without survey requirement`
+          );
+
           // ใช้ข้อมูล birth_date จาก user document
           const birthDateFromUser = userData.birth_date;
           setBirthDate(birthDateFromUser);
-          
+
           if (birthDateFromUser) {
             const age = calculateAge(birthDateFromUser);
             setUserAge(age);
             console.log(`👤 User age calculated: ${age} years`);
           }
-          
+
           // สำหรับเทอม 2/3 ไม่ต้องมี survey data
           setSurveyData({ term: currentConfig.term });
           setSurveyDocId(userSurveyDoc.id);
@@ -204,13 +327,13 @@ const UploadScreen = ({ navigation, route }) => {
           // ***** สำหรับเทอม 1: ต้องมี survey data *****
           const surveyData = userData.survey;
           if (surveyData) {
-            setSurveyData(surveyData);
+            setSurveyData({ ...surveyData, term: currentConfig.term });
             setSurveyDocId(userSurveyDoc.id);
-            
+
             // ดึง birth_date จาก survey หรือ user data
             const birthDateData = userData.birth_date;
             setBirthDate(birthDateData);
-            
+
             if (birthDateData) {
               const age = calculateAge(birthDateData);
               setUserAge(age);
@@ -227,7 +350,7 @@ const UploadScreen = ({ navigation, route }) => {
         if (userData.uploads) {
           // Convert old format to new format if needed
           const convertedUploads = {};
-          Object.keys(userData.uploads).forEach(docId => {
+          Object.keys(userData.uploads).forEach((docId) => {
             const upload = userData.uploads[docId];
             if (Array.isArray(upload)) {
               convertedUploads[docId] = upload;
@@ -240,8 +363,10 @@ const UploadScreen = ({ navigation, route }) => {
         }
       } else {
         // ไม่พบข้อมูล user
-        if (currentConfig.term === '2' || currentConfig.term === '3') {
-          console.log(`🎓 Term ${currentConfig.term}: Creating minimal data without survey requirement`);
+        if (currentConfig.term === "2" || currentConfig.term === "3") {
+          console.log(
+            `🎓 Term ${currentConfig.term}: Creating minimal data without survey requirement`
+          );
           // สำหรับเทอม 2/3 ไม่จำเป็นต้องมี survey data
           setSurveyData({ term: currentConfig.term });
           setSurveyDocId(null);
@@ -251,19 +376,14 @@ const UploadScreen = ({ navigation, route }) => {
           setSurveyDocId(null);
         }
       }
-    } catch (error) {
-          console.error("🚨 Error in checkSubmissionStatus:", error);
-      } finally {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     };
 
     // เรียกใช้เมื่อ appConfig ถูกโหลดแล้ว
     if (appConfig) {
-        checkSubmissionStatus();
+      checkSubmissionStatus();
     }
-    
-  }, [appConfig]); 
+  }, [appConfig]);
 
   // -----------------------------------------------------
   // 3. Document List Generator (สร้างรายการเอกสาร)
@@ -438,7 +558,7 @@ const UploadScreen = ({ navigation, route }) => {
     return totalHours;
   };
 
-  // UPDATED: AI validation function to use unified AI system
+  // แก้ไขฟังก์ชัน performAIValidation เพื่อเก็บผลลัพธ์
   const performAIValidation = async (file, docId) => {
     if (!aiBackendAvailable) {
       Alert.alert(
@@ -446,7 +566,7 @@ const UploadScreen = ({ navigation, route }) => {
         "ไม่สามารถตรวจสอบเอกสารด้วย AI ได้ในขณะนี้ คุณสามารถดำเนินการต่อได้",
         [{ text: "ตกลง" }]
       );
-      return true; // อนุญาตให้อัพโหลดต่อเมื่อ AI ไม่พร้อม
+      return true;
     }
 
     if (!needsAIValidation(docId)) {
@@ -466,17 +586,26 @@ const UploadScreen = ({ navigation, route }) => {
         file.mimeType
       );
 
-      // --- แก้ไขส่วนนี้ ---
+      // เตรียมข้อมูลสำหรับเก็บในฐานข้อมูล
+      const validationDataForDB = {
+        documentType: docId,
+        fileName: file.filename || `${docId}_file`,
+        fileUri: file.uri, // อาจจะไม่เก็บจริงเพื่อความปลอดภัย
+        mimeType: file.mimeType,
+        aiResult: validationResult,
+        aiBackendInfo: {
+          method: aiBackendAvailable ? 'available' : 'unavailable',
+          // เพิ่มข้อมูล backend อื่นๆ ตามต้องการ
+        }
+      };
+
       if (docId === "volunteer_doc") {
         const hours = validationResult.accumulatedHours || 0;
         console.log(`📊 Extracted volunteer hours: ${hours}`);
 
-        // อัพเดตชั่วโมงจิตอาสา
         setVolunteerHours((prev) => {
           const newTotal = prev + hours;
-          console.log(
-            `🔄 Updating volunteer hours from ${prev} to ${newTotal}`
-          );
+          console.log(`🔄 Updating volunteer hours from ${prev} to ${newTotal}`);
           if (newTotal >= 36) {
             Alert.alert(
               "ครบชั่วโมงจิตอาสาแล้ว",
@@ -486,7 +615,6 @@ const UploadScreen = ({ navigation, route }) => {
           return newTotal;
         });
 
-        // สำหรับ volunteer_doc ให้แสดง alert พิเศษ
         return new Promise((resolve) => {
           Alert.alert(
             "ตรวจสอบชั่วโมงจิตอาสา",
@@ -504,8 +632,12 @@ const UploadScreen = ({ navigation, route }) => {
               },
               {
                 text: "ใช้ไฟล์นี้",
-                onPress: () => {
+                onPress: async () => {
                   console.log("✓ User accepted volunteer document");
+                  
+                  // เก็บผลการตรวจสอบ AI ลงฐานข้อมูล
+                  await saveAIValidationResult(validationDataForDB);
+                  
                   resolve(true);
                 },
               },
@@ -514,25 +646,26 @@ const UploadScreen = ({ navigation, route }) => {
         });
       }
 
-      // สำหรับ document อื่นๆ ใช้การแจ้งเตือนปกติ
+      // สำหรับเอกสารอื่นๆ
       return new Promise((resolve) => {
         showValidationAlert(
           validationResult,
           docId,
-          () => {
-            console.log(
-              `✓ AI Validation passed for ${file.filename} (${docId})`
-            );
+          async () => {
+            console.log(`✓ AI Validation passed for ${file.filename} (${docId})`);
+            
+            // เก็บผลการตรวจสอบ AI ลงฐานข้อมูล
+            await saveAIValidationResult(validationDataForDB);
+            
             resolve(true);
           },
           () => {
-            console.log(
-              `✗ AI Validation failed for ${file.filename} (${docId})`
-            );
+            console.log(`✗ AI Validation failed for ${file.filename} (${docId})`);
             resolve(false);
           }
         );
       });
+
     } catch (error) {
       console.error("AI validation error:", error);
       return new Promise((resolve) => {
@@ -1007,6 +1140,7 @@ const UploadScreen = ({ navigation, route }) => {
       );
     }
   };
+
   // Rest of the methods remain identical to the original file...
   const handleSubmitDocuments = async () => {
     const documents = generateDocumentsList(surveyData);
@@ -1362,6 +1496,7 @@ const UploadScreen = ({ navigation, route }) => {
         aiBackendAvailable={aiBackendAvailable}
         volunteerHours={volunteerHours}
         isConvertingToPDF={isConvertingToPDF}
+        term={term} // เพิ่ม term prop
       />
 
       <SubmitSection
@@ -1412,5 +1547,35 @@ const styles = StyleSheet.create({
     padding: 16,
   },
 });
+
+// ฟังก์ชันสำหรับดึงประวัติการตรวจสอบ AI (สำหรับใช้ในหน้าอื่น)
+export const getUserAIValidationHistory = async (userId, limit = 20) => {
+  try {
+    const { query, where, orderBy, getDocs, limitToLast } = await import('firebase/firestore');
+    
+    const validationsRef = collection(db, "ai_validation_results");
+    const q = query(
+      validationsRef,
+      where("userId", "==", userId),
+      orderBy("validatedAt", "desc"),
+      limitToLast(limit)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const validations = [];
+    
+    querySnapshot.forEach((doc) => {
+      validations.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    return validations;
+  } catch (error) {
+    console.error("Error fetching AI validation history:", error);
+    return [];
+  }
+};
 
 export default UploadScreen;
