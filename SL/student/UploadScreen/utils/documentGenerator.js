@@ -62,7 +62,7 @@ const generateTerm2And3Documents = (birthDateTimestamp) => {
     // 1. ใบเบิกเงินกู้ยืม (Disbursement Form)
     documents.push({
         id: "disbursement_form",
-        title: "ใบเบิกเงินกู้ยืม",
+        title: "แบบยืนยันการเบิกเงินกู้ยืม",
         description: "แบบฟอร์มเบิกเงินกู้ยืมที่กรอกและลงลายมือชื่อเรียบร้อย",
         required: true,
         type: "upload",
@@ -73,7 +73,7 @@ const generateTerm2And3Documents = (birthDateTimestamp) => {
     // 2. ใบภาระค่าใช้จ่ายทุน (Expense Burden Form)
     documents.push({
         id: "expense_burden_form",
-        title: "ใบภาระค่าใช้จ่าย",
+        title: "ใบภาระค่าใช้จ่ายทุน",
         description: "ใบภาระค่าใช้จ่ายในการเรียน/ทุนการศึกษา",
         required: true,
         type: "upload",
@@ -577,8 +577,8 @@ export const getAIValidationDocuments = () => {
         "id_copies_mother",
 
         // เทอม 2/3
-        "borrower_id_card",
-        "guardian_id_card"
+        "expense_burden_form"
+        "guardian_id_copies"
     ];
 };
 
