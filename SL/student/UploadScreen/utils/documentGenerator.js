@@ -16,18 +16,27 @@ import { FamStatus_cert } from "../../documents/FamStatus_cert";
  * @returns {number | null} อายุเป็นปี หรือ null ถ้าข้อมูลไม่ถูกต้อง
  */
 const calculateAge = (birthDateTimestamp) => {
-    if (!birthDateTimestamp) return null;
+    console.log(`🔍 calculateAge called with:`, birthDateTimestamp);
+    console.log(`🔍 Type:`, typeof birthDateTimestamp);
+    
+    if (!birthDateTimestamp) {
+        console.log(`❌ Birth date is null/undefined`);
+        return null;
+    }
 
     // ตรวจสอบและแปลงจาก Firebase Timestamp object หรือ Unix timestamp (milliseconds)
     let birthDate;
     if (typeof birthDateTimestamp.toDate === 'function') {
         birthDate = birthDateTimestamp.toDate();
+        console.log(`✅ Converted from Firestore Timestamp:`, birthDate);
     } else if (typeof birthDateTimestamp === 'number') {
         birthDate = new Date(birthDateTimestamp);
+        console.log(`✅ Converted from Unix timestamp:`, birthDate);
     } else if (birthDateTimestamp instanceof Date) {
         birthDate = birthDateTimestamp;
+        console.log(`✅ Already Date object:`, birthDate);
     } else {
-        console.warn('Invalid birth date format:', birthDateTimestamp);
+        console.warn('❌ Invalid birth date format:', birthDateTimestamp);
         return null;
     }
 
@@ -39,6 +48,8 @@ const calculateAge = (birthDateTimestamp) => {
     if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
         age--;
     }
+    
+    console.log(`✅ Calculated age: ${age} years`);
     return age;
 };
 
@@ -54,8 +65,13 @@ export { calculateAge };
  */
 const generateTerm2And3Documents = (birthDateTimestamp) => {
     const documents = [];
+    
+    // Debug logging
+    console.log(`📋 generateTerm2And3Documents called with:`, birthDateTimestamp);
+    console.log(`📋 Type of birthDateTimestamp:`, typeof birthDateTimestamp);
+    console.log(`📋 Is null/undefined:`, birthDateTimestamp === null || birthDateTimestamp === undefined);
+    
     const age = calculateAge(birthDateTimestamp);
-
     console.log(`📋 Generating documents for Term 2/3. Calculated age: ${age} years`);
 
     // เอกสารบังคับ 3 รายการหลัก
@@ -88,7 +104,7 @@ const generateTerm2And3Documents = (birthDateTimestamp) => {
         description: "บัตรประชาชนต้องไม่หมดอายุ",
         required: true,
         type: "upload",
-        needsAIValidation: true,
+        needsAIValidation: true, // 🔧 แก้ไข: เปิดใช้ AI validation
         canGenerate: false,
     });
 
@@ -101,7 +117,7 @@ const generateTerm2And3Documents = (birthDateTimestamp) => {
             description: "บัตรประชาชนต้องไม่หมดอายุ",
             required: true,
             type: "upload",
-            needsAIValidation: true,
+            needsAIValidation: true, // 🔧 แก้ไข: เปิดใช้ AI validation
             canGenerate: false,
         });
     } else {
@@ -315,7 +331,7 @@ const generateTerm1Documents = ({ familyStatus, fatherIncome, motherIncome, guar
         if (legalStatus === "มีเอกสาร") {
             documents.push({
                 id: "legal_status",
-                title: "สำเนาใบหย่า (กรณีหย่าร้าง) หรือ สำเนาใบมรณบัตร (กรณีเสียชีวิต)",
+                title: "สำเนาใบหย่า (กรณีหย่าร้าง) หรือ สำเนาใบมรดกบัตร (กรณีเสียชีวิต)",
                 required: true,
                 canGenerate: false,
                 needsAIValidation: false,
@@ -430,7 +446,7 @@ const generateTerm1Documents = ({ familyStatus, fatherIncome, motherIncome, guar
         if (legalStatus === "มีเอกสาร") {
             documents.push({
                 id: "legal_status",
-                title: "สำเนาใบหย่า (กรณีหย่าร้าง) หรือ สำเนาใบมรณบัตร (กรณีเสียชีวิต)",
+                title: "สำเนาใบหย่า (กรณีหย่าร้าง) หรือ สำเนาใบมรดกบัตร (กรณีเสียชีวิต)",
                 description: "",
                 required: true,
                 canGenerate: false,
@@ -478,16 +494,31 @@ const generateTerm1Documents = ({ familyStatus, fatherIncome, motherIncome, guar
  * @returns {Array} Array of document objects
  */
 export const generateDocumentsList = (data) => {
-    if (!data) return [];
+    console.log(`📋 generateDocumentsList called with data:`, data);
+    
+    if (!data) {
+        console.log(`❌ No data provided to generateDocumentsList`);
+        return [];
+    }
     
     const { term, familyStatus, fatherIncome, motherIncome, guardianIncome, birth_date, livingWith, legalStatus } = data;
+    
+    console.log(`📋 Extracted data:`, {
+        term,
+        familyStatus,
+        birth_date: birth_date ? 'present' : 'missing',
+        birth_date_type: typeof birth_date,
+        birth_date_value: birth_date
+    });
 
     // ***** Logic ใหม่สำหรับ เทอม 2 และ 3 *****
     if (term === '2' || term === '3') {
+        console.log(`🎓 Generating documents for Term ${term}`);
         return generateTerm2And3Documents(birth_date);
     }
 
     // ***** Logic เดิมสำหรับ เทอม 1 *****
+    console.log(`🎓 Generating documents for Term ${term} (legacy logic)`);
     return generateTerm1Documents({ familyStatus, fatherIncome, motherIncome, guardianIncome, livingWith, legalStatus });
 };
 
@@ -530,7 +561,7 @@ export const handleDownloadDocument = (docId, downloadUrl = null) => {
 };
 
 // -----------------------------------------------------
-// 6. Utility Functions (Generatable/AI Validation)
+// 6. Utility Functions (Generatable/AI Validation) - 🔧 แก้ไขให้ตรงกับ document ID
 // -----------------------------------------------------
 /**
  * Get list of document IDs that can generate forms
@@ -549,6 +580,7 @@ export const getGeneratableDocuments = () => {
         "single_parent_income_cert",
         "famo_income_cert",
         "family_status_cert",
+        // เทอม 2/3 ไม่มี template ให้ generate
     ];
 };
 
@@ -562,7 +594,7 @@ export const canGenerateDocument = (docId) => {
 };
 
 /**
- * Get documents that need AI validation
+ * Get documents that need AI validation - 🔧 แก้ไขให้ตรงกับ document ID ที่สร้างจริง
  * @returns {Array} Array of document IDs that need AI validation
  */
 export const getAIValidationDocuments = () => {
@@ -575,15 +607,16 @@ export const getAIValidationDocuments = () => {
         "id_copies_student",
         "id_copies_father",
         "id_copies_mother",
+        "guardian_id_copies", // สำหรับเทอม 1 กรณีผู้ปกครอง
 
-        // เทอม 2/3
-        "expense_burden_form",
-        "guardian_id_copies"
+        // เทอม 2/3 - ใช้ ID ที่ตรงกับที่สร้างใน generateTerm2And3Documents
+        // "id_copies_student" - ใช้ ID เดียวกันกับเทอม 1
+        // "guardian_id_copies" - ใช้ ID เดียวกันกับเทอม 1
     ];
 };
 
 /**
- * Check if document needs AI validation
+ * Check if document needs AI validation - 🔧 แก้ไขให้ตรงกับ document ID ที่สร้างจริง
  * @param {string} docId - Document ID to check
  * @returns {boolean} True if document needs AI validation
  */
