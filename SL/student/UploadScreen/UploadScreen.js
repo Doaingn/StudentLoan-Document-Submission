@@ -1,9 +1,7 @@
 import { useState, useEffect } from "react";
 import {
-  View,
   ScrollView,
   StyleSheet,
-  ActivityIndicator,
   Alert,
 } from "react-native";
 import { db, auth } from "../../database/firebase";
@@ -14,22 +12,23 @@ import {
   setDoc,
   onSnapshot,
   deleteField,
+  collection,
+  addDoc,
 } from "firebase/firestore";
 import { storage } from "../../database/firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+// Import for PDF creation
 import * as Print from "expo-print";
 import * as FileSystem from "expo-file-system/legacy";
-
-// Import refactored modules
 import { mergeImagesToPdf } from "./utils/pdfMerger";
+
+// Import refactored AI validation modules
 import {
   validateDocument,
   showValidationAlert,
   checkAIBackendStatus,
   needsAIValidation,
 } from "./documents_ai/UnifiedDocumentAI";
-import { generateDocumentsList, calculateAge } from "./utils/documentGenerator";
-import { handleDocumentDownload } from "./utils/documentHandlers";
 
 // Import refactored components
 import LoadingScreen from "./components/LoadingScreen";
@@ -41,12 +40,15 @@ import StorageProgressCard from "./components/StorageProgressCard";
 import DocumentsSection from "./components/DocumentsSection";
 import SubmitSection from "./components/SubmitSection";
 import FileDetailModal from "./components/FileDetailModal";
+import { generateDocumentsList, calculateAge } from "./utils/documentGenerator";
+import { handleDocumentDownload } from "./utils/documentHandlers";
 
 const UploadScreen = ({ navigation, route }) => {
   // State management
   const [surveyData, setSurveyData] = useState(null);
   const [surveyDocId, setSurveyDocId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  // Updated: Change uploads structure to support multiple files per document
   const [uploads, setUploads] = useState({});
   const [volunteerHours, setVolunteerHours] = useState(0);
   const [uploadProgress, setUploadProgress] = useState({});
@@ -63,35 +65,175 @@ const UploadScreen = ({ navigation, route }) => {
   const [storageUploadProgress, setStorageUploadProgress] = useState({});
   const [appConfig, setAppConfig] = useState(null);
   const [isConvertingToPDF, setIsConvertingToPDF] = useState({});
+
+  // AI related states - UPDATED to use unified AI system
   const [isValidatingAI, setIsValidatingAI] = useState({});
   const [aiBackendAvailable, setAiBackendAvailable] = useState(false);
+
   const [academicYear, setAcademicYear] = useState(null);
   const [term, setTerm] = useState(null);
-  const [birthDate, setBirthDate] = useState(null);
+  const [birthDate, setBirthDate] = useState(null); // เก็บ Timestamp object ของวันเกิด
   const [document, setDocuments] = useState([]);
-  const [userAge, setUserAge] = useState(null);
+  const [userAge, setUserAge] = useState(null); // เพิ่มสำหรับเก็บอายุที่คำนวณได้
 
-  // Configuration and initialization
+  //ฟังก์ชันคำนวณชั่วโมงเมื่อโหลดข้อมูลครั้งแรก
   useEffect(() => {
-    initializeApp();
+    if (uploads.volunteer_doc) {
+      const initialHours = calculateVolunteerHoursFromUploads(uploads);
+      setVolunteerHours(initialHours);
+      console.log(`🔄 Initial volunteer hours calculated: ${initialHours}`);
+    }
+  }, [uploads.volunteer_doc]);
+
+  // Check AI backend status on component mount - UPDATED to use unified AI system
+  useEffect(() => {
+    const checkAIStatus = async () => {
+      const isAvailable = await checkAIBackendStatus();
+      setAiBackendAvailable(isAvailable);
+      if (!isAvailable) {
+        console.warn("AI backend is not available");
+      }
+    };
+    checkAIStatus();
   }, []);
 
-  const initializeApp = async () => {
-    await setupConfigListener();
-    await checkAIStatus();
+  // ฟังก์ชันใหม่สำหรับเก็บผลการตรวจสอบ AI
+  const saveAIValidationResult = async (validationData) => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        console.error("No authenticated user found");
+        return null;
+      }
+
+      // สร้าง validation result object
+      const validationResult = {
+        userId: currentUser.uid,
+        userEmail: currentUser.email,
+        documentType: validationData.documentType,
+        fileName: validationData.fileName,
+        fileUri: validationData.fileUri, // อาจไม่ต้องเก็บ URI สำหรับความปลอดภัย
+        mimeType: validationData.mimeType,
+        validatedAt: new Date().toISOString(),
+        
+        // ข้อมูลผลการตรวจสอบ AI
+        aiResult: {
+          isValid: validationData.aiResult.isValid || false,
+          confidence: validationData.aiResult.confidence || 0,
+          overall_status: validationData.aiResult.overall_status || 'unknown',
+          
+          // ข้อมูลที่แยกออกได้จากเอกสาร
+          extractedData: validationData.aiResult.extractedData || {},
+          
+          // ข้อมูลการรับรองสำเนา (สำหรับ ID Card)
+          certificationInfo: validationData.aiResult.certificationInfo || {},
+          
+          // ข้อมูลคุณภาพเอกสาร
+          imageQuality: validationData.aiResult.imageQuality || 'unknown',
+          
+          // ปัญหาที่พบ
+          qualityIssues: validationData.aiResult.qualityIssues || [],
+          
+          // คำแนะนำ
+          recommendations: validationData.aiResult.recommendations || [],
+          
+          // ข้อมูลเฉพาะตามประเภทเอกสาร
+          documentSpecificData: validationData.aiResult.documentSpecificData || {},
+          
+          // สำหรับเอกสารจิตอาสา
+          ...(validationData.documentType === 'volunteer_doc' && {
+            accumulatedHours: validationData.aiResult.accumulatedHours || 0,
+            volunteerActivities: validationData.aiResult.volunteerActivities || []
+          }),
+          
+          // ข้อมูล AI backend ที่ใช้
+          aiBackendInfo: {
+            method: validationData.aiBackendInfo?.method || 'unknown',
+            model: validationData.aiBackendInfo?.model || 'unknown',
+            backendUrl: validationData.aiBackendInfo?.backendUrl || null
+          }
+        },
+        
+        // ข้อมูล academic context
+        academicYear: appConfig?.academicYear || null,
+        term: appConfig?.term || null,
+        
+        // สถานะการใช้งาน
+        userAction: 'accepted', // ผู้ใช้เลือก "ใช้ไฟล์นี้"
+        
+        // Metadata
+        metadata: {
+          appVersion: '1.0.0', // เพิ่ม version ของแอป
+          platform: 'react-native',
+          validationTimestamp: Date.now()
+        }
+      };
+
+      // เก็บลงใน collection "ai_validation_results"
+      const validationRef = await addDoc(
+        collection(db, "ai_validation_results"), 
+        validationResult
+      );
+
+      console.log("✅ AI validation result saved with ID:", validationRef.id);
+      
+      // อัพเดตข้อมูลในเอกสาร user ด้วย (เก็บ reference)
+      const userRef = doc(db, "users", currentUser.uid);
+      const userDoc = await getDoc(userRef);
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const aiValidations = userData.aiValidations || [];
+        
+        // เพิ่ม reference ใหม่
+        aiValidations.push({
+          validationId: validationRef.id,
+          documentType: validationData.documentType,
+          fileName: validationData.fileName,
+          validatedAt: new Date().toISOString(),
+          status: validationData.aiResult.overall_status
+        });
+        
+        // เก็บเฉพาะ 50 รายการล่าสุด เพื่อไม่ให้เอกสาร user ใหญ่เกินไป
+        if (aiValidations.length > 50) {
+          aiValidations.splice(0, aiValidations.length - 50);
+        }
+        
+        await updateDoc(userRef, {
+          aiValidations: aiValidations,
+          lastAIValidation: new Date().toISOString()
+        });
+      }
+      
+      return validationRef.id;
+      
+    } catch (error) {
+      console.error("❌ Error saving AI validation result:", error);
+      // ไม่ให้ error นี้ขัดขวางการทำงานหลัก
+      return null;
+    }
   };
 
-  const setupConfigListener = () => {
+  // -----------------------------------------------------
+  // 1. Config Listener (Term และ Academic Year)
+  // -----------------------------------------------------
+  useEffect(() => {
     const configRef = doc(db, "DocumentService", "config");
-    return onSnapshot(
+
+    const configUnsubscribe = onSnapshot(
       configRef,
       (docSnap) => {
         if (docSnap.exists()) {
           const config = docSnap.data();
-          setAppConfig(config);
-          setAcademicYear(config.academicYear);
-          setTerm(config.term);
+          if (config) {
+            setAppConfig(config);
+            setAcademicYear(config.academicYear);
+            setTerm(config.term);
+          } else {
+            console.warn("ไม่พบ config document");
+          }
         } else {
+          // ใช้ค่า Default หาก config document ไม่มี
           const defaultConfig = { academicYear: "2567", term: "1" };
           setAppConfig(defaultConfig);
           setAcademicYear(defaultConfig.academicYear);
@@ -102,174 +244,214 @@ const UploadScreen = ({ navigation, route }) => {
         console.error("Error listening to app config:", error);
       }
     );
-  };
 
-  const checkAIStatus = async () => {
-    const isAvailable = await checkAIBackendStatus();
-    setAiBackendAvailable(isAvailable);
-    if (!isAvailable) {
-      console.warn("AI backend is not available");
-    }
-  };
+    return () => configUnsubscribe();
+  }, []); // เรียกใช้ครั้งเดียวเมื่อ Component Mount
 
-  // Data loading effects
+  // -----------------------------------------------------
+  // 2. Check submission status and load data (ปรับปรุงการดึงข้อมูลอย่างปลอดภัย)
+  // -----------------------------------------------------
   useEffect(() => {
-    if (uploads.volunteer_doc) {
-      const initialHours = calculateVolunteerHoursFromUploads(uploads);
-      setVolunteerHours(initialHours);
-    }
-  }, [uploads.volunteer_doc]);
+    const checkSubmissionStatus = async () => {
+      setIsLoading(true);
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        setIsLoading(false);
+        return;
+      }
 
-  useEffect(() => {
+      // ***** แก้ไขส่วนที่ 1: ดึง Config อย่างปลอดภัย *****
+      let currentConfig = appConfig;
+      if (!currentConfig) {
+        const configDoc = await getDoc(doc(db, "DocumentService", "config"));
+        currentConfig =
+          configDoc && configDoc.exists()
+            ? configDoc.data()
+            : { academicYear: "2567", term: "1" };
+      }
+
+      // ***** ตรวจสอบ Submission status สำหรับ term ปัจจุบัน *****
+      const termCollectionName = `document_submissions_${
+        currentConfig.academicYear || "2567"
+      }_${currentConfig.term || "1"}`;
+
+      console.log(
+        `🔍 Checking submission for collection: ${termCollectionName}`
+      );
+
+      const submissionRef = doc(db, termCollectionName, currentUser.uid);
+      const submissionDoc = await getDoc(submissionRef);
+
+      if (submissionDoc.exists()) {
+        console.log(
+          "✅ Found existing submission, redirecting to status screen"
+        );
+        navigation.replace("DocumentStatusScreen", {
+          submissionData: submissionDoc.data(),
+        });
+        setIsLoading(false);
+        return;
+      } else {
+        console.log("📝 No submission found, loading upload screen");
+      }
+
+      // ***** ดึงข้อมูล User และ Survey Data *****
+      const userSurveyRef = doc(db, "users", currentUser.uid);
+      const userSurveyDoc = await getDoc(userSurveyRef);
+
+      if (userSurveyDoc.exists()) {
+        const userData = userSurveyDoc.data();
+
+        // ***** สำหรับเทอม 2/3: ไม่จำเป็นต้องมี survey data *****
+        if (currentConfig.term === "2" || currentConfig.term === "3") {
+          console.log(
+            `🎓 Term ${currentConfig.term}: Setting up without survey requirement`
+          );
+
+          // ใช้ข้อมูล birth_date จาก user document
+          const birthDateFromUser = userData.birth_date;
+          setBirthDate(birthDateFromUser);
+
+          if (birthDateFromUser) {
+            const age = calculateAge(birthDateFromUser);
+            setUserAge(age);
+            console.log(`👤 User age calculated: ${age} years`);
+          }
+
+          // สำหรับเทอม 2/3 ไม่ต้องมี survey data
+          setSurveyData({ term: currentConfig.term });
+          setSurveyDocId(userSurveyDoc.id);
+        } else {
+          // ***** สำหรับเทอม 1: ต้องมี survey data *****
+          const surveyData = userData.survey;
+          if (surveyData) {
+            setSurveyData({ ...surveyData, term: currentConfig.term });
+            setSurveyDocId(userSurveyDoc.id);
+
+            // ดึง birth_date จาก survey หรือ user data
+            const birthDateData = userData.birth_date;
+            setBirthDate(birthDateData);
+
+            if (birthDateData) {
+              const age = calculateAge(birthDateData);
+              setUserAge(age);
+              console.log(`👤 User age calculated: ${age} years`);
+            }
+          } else {
+            console.log("❌ Term 1 requires survey data but none found");
+            setSurveyData(null);
+            setSurveyDocId(null);
+          }
+        }
+
+        // ***** ดึงข้อมูล uploads ที่มีอยู่ *****
+        if (userData.uploads) {
+          // Convert old format to new format if needed
+          const convertedUploads = {};
+          Object.keys(userData.uploads).forEach((docId) => {
+            const upload = userData.uploads[docId];
+            if (Array.isArray(upload)) {
+              convertedUploads[docId] = upload;
+            } else {
+              // Convert single file to array format
+              convertedUploads[docId] = [upload];
+            }
+          });
+          setUploads(convertedUploads);
+        }
+      } else {
+        // ไม่พบข้อมูล user
+        if (currentConfig.term === "2" || currentConfig.term === "3") {
+          console.log(
+            `🎓 Term ${currentConfig.term}: Creating minimal data without survey requirement`
+          );
+          // สำหรับเทอม 2/3 ไม่จำเป็นต้องมี survey data
+          setSurveyData({ term: currentConfig.term });
+          setSurveyDocId(null);
+        } else {
+          console.log("❌ Term 1 requires user data but none found");
+          setSurveyData(null);
+          setSurveyDocId(null);
+        }
+      }
+      setIsLoading(false);
+    };
+
+    // เรียกใช้เมื่อ appConfig ถูกโหลดแล้ว
     if (appConfig) {
       checkSubmissionStatus();
     }
   }, [appConfig]);
 
+  // -----------------------------------------------------
+  // 3. Document List Generator (สร้างรายการเอกสาร)
+  // -----------------------------------------------------
   useEffect(() => {
-    generateDocumentList();
-  }, [surveyData, term, academicYear, birthDate]);
+  console.log(`🔧 Document Generator useEffect triggered`);
+  console.log(`🔧 Current values:`, {
+    term,
+    academicYear,
+    birthDate: birthDate ? 'present' : 'missing',
+    birthDateType: typeof birthDate,
+    surveyData: surveyData ? 'present' : 'missing'
+  });
 
-  const checkSubmissionStatus = async () => {
-    setIsLoading(true);
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      setIsLoading(false);
-      return;
-    }
-
-    const currentConfig = await getCurrentConfig();
-    const termCollectionName = getTermCollectionName(currentConfig);
-
-    const submissionExists = await checkExistingSubmission(
-      termCollectionName,
-      currentUser.uid
-    );
-    if (submissionExists) return;
-
-    await loadUserData(currentConfig, currentUser.uid);
-    setIsLoading(false);
-  };
-
-  const getCurrentConfig = async () => {
-    if (appConfig) return appConfig;
-    const configDoc = await getDoc(doc(db, "DocumentService", "config"));
-    return configDoc?.exists()
-      ? configDoc.data()
-      : { academicYear: "2567", term: "1" };
-  };
-
-  const getTermCollectionName = (config) => {
-    return `document_submissions_${config.academicYear || "2567"}_${
-      config.term || "1"
-    }`;
-  };
-
-  const checkExistingSubmission = async (collectionName, userId) => {
-    const submissionRef = doc(db, collectionName, userId);
-    const submissionDoc = await getDoc(submissionRef);
-
-    if (submissionDoc.exists()) {
-      navigation.replace("DocumentStatusScreen", {
-        submissionData: submissionDoc.data(),
-      });
-      setIsLoading(false);
-      return true;
-    }
-    return false;
-  };
-
-  const loadUserData = async (config, userId) => {
-    const userSurveyRef = doc(db, "users", userId);
-    const userSurveyDoc = await getDoc(userSurveyRef);
-
-    if (!userSurveyDoc.exists()) {
-      handleNoUserData(config);
-      return;
-    }
-
-    const userData = userSurveyDoc.data();
-    await handleUserData(config, userData, userSurveyDoc.id);
-  };
-
-  const handleNoUserData = (config) => {
-    if (config.term === "2" || config.term === "3") {
-      setSurveyData({ term: config.term });
-      setSurveyDocId(null);
-    } else {
-      setSurveyData(null);
-      setSurveyDocId(null);
-    }
-  };
-
-  const handleUserData = async (config, userData, docId) => {
-    if (config.term === "2" || config.term === "3") {
-      await setupTerm23Data(config, userData, docId);
-    } else {
-      await setupTerm1Data(userData, docId);
-    }
-
-    if (userData.uploads) {
-      setUploads(convertUploadsToNewFormat(userData.uploads));
-    }
-  };
-
-  const setupTerm23Data = async (config, userData, docId) => {
-    setSurveyData({ term: config.term });
-    setSurveyDocId(docId);
-    await setupBirthDate(userData.birth_date);
-  };
-
-  const setupTerm1Data = async (userData, docId) => {
-    if (userData.survey) {
-      setSurveyData({ ...userData.survey, term: appConfig.term });
-      setSurveyDocId(docId);
-      await setupBirthDate(userData.birth_date);
-    } else {
-      setSurveyData(null);
-      setSurveyDocId(null);
-    }
-  };
-
-  const setupBirthDate = async (birthDateData) => {
-    setBirthDate(birthDateData);
-    if (birthDateData) {
-      const age = calculateAge(birthDateData);
-      setUserAge(age);
-    }
-  };
-
-  const convertUploadsToNewFormat = (uploadsData) => {
-    const convertedUploads = {};
-    Object.keys(uploadsData).forEach((docId) => {
-      const upload = uploadsData[docId];
-      convertedUploads[docId] = Array.isArray(upload) ? upload : [upload];
+  // สำหรับเทอม 2/3: ใช้ birthDate และ term ในการสร้างรายการ
+  if (term === "2" || term === "3") {
+    console.log(`🎓 Generating documents for Term ${term}`);
+    
+    // 🔧 แก้ไข: ส่งข้อมูลที่ครบถ้วนสำหรับเทอม 2/3
+    const docs = generateDocumentsList({
+      term: term,
+      academicYear: academicYear,
+      birth_date: birthDate,  // ส่ง birthDate ไปด้วย
     });
-    return convertedUploads;
-  };
+    
+    setDocuments(docs);
+    console.log(`📋 Generated ${docs.length} documents for Term ${term}`);
+    console.log(`📋 Documents list:`, docs.map(d => ({ 
+      id: d.id, 
+      title: d.title, 
+      required: d.required 
+    })));
+    
+    return; // ออกจาก useEffect เร็วๆ สำหรับเทอม 2/3
+  }
+  
+  // สำหรับเทอม 1: ต้องมีข้อมูลที่จำเป็นครบถ้วน
+  else if (surveyData && term && academicYear && birthDate) {
+    console.log(`🎓 Generating documents for Term ${term} with full survey data`);
+    
+    const docs = generateDocumentsList({
+      ...surveyData, // ส่ง surveyData เดิม (familyStatus, incomes)
+      term: term,
+      academicYear: academicYear,
+      birth_date: birthDate, // ส่ง birth date (Timestamp) เพื่อคำนวณอายุ
+    });
+    
+    setDocuments(docs);
+    console.log(`📋 Generated ${docs.length} documents for Term ${term}`);
+    console.log(`📋 Documents list:`, docs.map(d => ({ 
+      id: d.id, 
+      title: d.title, 
+      required: d.required 
+    })));
+    
+  } else if (!surveyData && term === "1") {
+    // หา term 1 แต่ยังไม่มี surveyData ให้เคลียร์รายการเอกสาร
+    console.log(`❌ Term 1 without survey data - clearing document list`);
+    setDocuments([]);
+  } else {
+    console.log(`⏳ Waiting for required data...`, {
+      hasSurveyData: !!surveyData,
+      hasTerm: !!term,
+      hasAcademicYear: !!academicYear,
+      hasBirthDate: !!birthDate
+    });
+  }
+}, [surveyData, term, academicYear, birthDate]);
 
-  const generateDocumentList = () => {
-    if (term === "2" || term === "3") {
-      const docs = generateDocumentsList({
-        term,
-        academicYear,
-        birth_date: birthDate,
-      });
-      setDocuments(docs);
-    } else if (surveyData && term && academicYear && birthDate) {
-      const docs = generateDocumentsList({
-        ...surveyData,
-        term,
-        academicYear,
-        birth_date: birthDate,
-      });
-      setDocuments(docs);
-    } else if (!surveyData && term === "1") {
-      setDocuments([]);
-    }
-  };
-
-  // File operations
+  // Save uploads to Firebase
   const saveUploadsToFirebase = async (uploadsData) => {
     try {
       const currentUser = auth.currentUser;
@@ -296,14 +478,24 @@ const UploadScreen = ({ navigation, route }) => {
     ];
     const imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"];
 
-    return (
-      (mimeType &&
-        imageTypes.some((type) => mimeType.toLowerCase().includes(type))) ||
-      (filename &&
-        imageExtensions.some((ext) => filename.toLowerCase().endsWith(ext)))
-    );
+    if (
+      mimeType &&
+      imageTypes.some((type) => mimeType.toLowerCase().includes(type))
+    ) {
+      return true;
+    }
+
+    if (
+      filename &&
+      imageExtensions.some((ext) => filename.toLowerCase().endsWith(ext))
+    ) {
+      return true;
+    }
+
+    return false;
   };
 
+  // Function to convert image to PDF
   const convertImageToPDF = async (imageFile, docId, fileIndex) => {
     try {
       setIsConvertingToPDF((prev) => ({
@@ -323,12 +515,30 @@ const UploadScreen = ({ navigation, route }) => {
         <html>
         <head>
           <style>
-            @page { margin: 0; size: A4; }
-            body { margin: 0; padding: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
-            img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+            @page {
+              margin: 0;
+              size: A4;
+            }
+            body {
+              margin: 0;
+              padding: 0;
+              width: 100%;
+              height: 100%;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+            }
+            img {
+              max-width: 100%;
+              max-height: 100%;
+              object-fit: contain;
+              display: block;
+            }
           </style>
         </head>
-        <body><img src="${base64DataUri}" /></body>
+        <body>
+          <img src="${base64DataUri}" />
+        </body>
         </html>
       `;
 
@@ -336,23 +546,26 @@ const UploadScreen = ({ navigation, route }) => {
         html: htmlContent,
         base64: false,
       });
+
       const pdfInfo = await FileSystem.getInfoAsync(pdfUri);
       const originalName = imageFile.filename || imageFile.name || "image";
       const nameWithoutExtension = originalName.replace(/\.[^/.]+$/, "");
 
-      return {
+      const pdfFile = {
         filename: `${docId}.pdf`,
         uri: pdfUri,
         mimeType: "application/pdf",
         size: pdfInfo.size,
         uploadDate: new Date().toLocaleString("th-TH"),
         status: "pending",
-        aiValidated: needsAIValidation(docId),
-        fileIndex,
+        aiValidated: needsAIValidation(docId), // Updated to use unified AI system
+        fileIndex: fileIndex,
         convertedFromImage: true,
         originalImageName: imageFile.filename ?? null,
         originalImageType: imageFile.mimeType ?? null,
       };
+
+      return pdfFile;
     } catch (error) {
       console.error("Error converting image to PDF:", error);
       throw new Error(`ไม่สามารถแปลงรูปภาพเป็น PDF ได้: ${error.message}`);
@@ -366,11 +579,19 @@ const UploadScreen = ({ navigation, route }) => {
   };
 
   const calculateVolunteerHoursFromUploads = (uploadsData) => {
+    let totalHours = 0;
     const volunteerFiles = uploadsData.volunteer_doc || [];
-    return volunteerFiles.reduce((total, file) => total + (file.hours || 0), 0);
+
+    volunteerFiles.forEach((file) => {
+      if (file.hours) {
+        totalHours += file.hours;
+      }
+    });
+
+    return totalHours;
   };
 
-  // AI Validation
+  // แก้ไขฟังก์ชัน performAIValidation เพื่อเก็บผลลัพธ์
   const performAIValidation = async (file, docId) => {
     if (!aiBackendAvailable) {
       Alert.alert(
@@ -382,12 +603,15 @@ const UploadScreen = ({ navigation, route }) => {
     }
 
     if (!needsAIValidation(docId)) {
+      console.log(`Document ${docId} does not need AI validation`);
       return true;
     }
 
     setIsValidatingAI((prev) => ({ ...prev, [docId]: true }));
 
     try {
+      console.log(`🤖 Starting AI validation for ${docId}`);
+
       const validationResult = await validateDocument(
         file.uri,
         docId,
@@ -395,21 +619,98 @@ const UploadScreen = ({ navigation, route }) => {
         file.mimeType
       );
 
+      // เตรียมข้อมูลสำหรับเก็บในฐานข้อมูล
+      const validationDataForDB = {
+        documentType: docId,
+        fileName: file.filename || `${docId}_file`,
+        fileUri: file.uri, // อาจจะไม่เก็บจริงเพื่อความปลอดภัย
+        mimeType: file.mimeType,
+        aiResult: validationResult,
+        aiBackendInfo: {
+          method: aiBackendAvailable ? 'available' : 'unavailable',
+          // เพิ่มข้อมูล backend อื่นๆ ตามต้องการ
+        }
+      };
+
       if (docId === "volunteer_doc") {
-        return handleVolunteerDocumentValidation(validationResult, file, docId);
+        const hours = validationResult.accumulatedHours || 0;
+        console.log(`📊 Extracted volunteer hours: ${hours}`);
+
+        setVolunteerHours((prev) => {
+          const newTotal = prev + hours;
+          console.log(`🔄 Updating volunteer hours from ${prev} to ${newTotal}`);
+          if (newTotal >= 36) {
+            Alert.alert(
+              "ครบชั่วโมงจิตอาสาแล้ว",
+              `คุณสะสมครบ ${newTotal} ชั่วโมง`
+            );
+          }
+          return newTotal;
+        });
+
+        return new Promise((resolve) => {
+          Alert.alert(
+            "ตรวจสอบชั่วโมงจิตอาสา",
+            `AI ตรวจพบ ${hours} ชั่วโมงจิตอาสาในเอกสารนี้\nชั่วโมงรวมปัจจุบัน: ${
+              volunteerHours + hours
+            } ชั่วโมง`,
+            [
+              {
+                text: "ยกเลิก",
+                style: "cancel",
+                onPress: () => {
+                  console.log("✗ User cancelled volunteer document");
+                  resolve(false);
+                },
+              },
+              {
+                text: "ใช้ไฟล์นี้",
+                onPress: async () => {
+                  console.log("✓ User accepted volunteer document");
+                  
+                  // เก็บผลการตรวจสอบ AI ลงฐานข้อมูล
+                  await saveAIValidationResult(validationDataForDB);
+                  
+                  resolve(true);
+                },
+              },
+            ]
+          );
+        });
       }
 
+      // สำหรับเอกสารอื่นๆ
       return new Promise((resolve) => {
         showValidationAlert(
           validationResult,
           docId,
-          () => resolve(true),
-          () => resolve(false)
+          async () => {
+            console.log(`✓ AI Validation passed for ${file.filename} (${docId})`);
+            
+            // เก็บผลการตรวจสอบ AI ลงฐานข้อมูล
+            await saveAIValidationResult(validationDataForDB);
+            
+            resolve(true);
+          },
+          () => {
+            console.log(`✗ AI Validation failed for ${file.filename} (${docId})`);
+            resolve(false);
+          }
         );
       });
+
     } catch (error) {
       console.error("AI validation error:", error);
-      return handleAIValidationError(error);
+      return new Promise((resolve) => {
+        Alert.alert(
+          "เกิดข้อผิดพลาดในการตรวจสอบ",
+          `ไม่สามารถตรวจสอบเอกสารด้วย AI ได้: ${error.message}\nคุณต้องการดำเนินการต่อหรือไม่?`,
+          [
+            { text: "ลองใหม่", style: "cancel", onPress: () => resolve(false) },
+            { text: "ดำเนินการต่อ", onPress: () => resolve(true) },
+          ]
+        );
+      });
     } finally {
       setIsValidatingAI((prev) => {
         const newState = { ...prev };
@@ -419,45 +720,7 @@ const UploadScreen = ({ navigation, route }) => {
     }
   };
 
-  const handleVolunteerDocumentValidation = (validationResult, file, docId) => {
-    const hours = validationResult.accumulatedHours || 0;
-
-    setVolunteerHours((prev) => {
-      const newTotal = prev + hours;
-      if (newTotal >= 36) {
-        Alert.alert("ครบชั่วโมงจิตอาสาแล้ว", `คุณสะสมครบ ${newTotal} ชั่วโมง`);
-      }
-      return newTotal;
-    });
-
-    return new Promise((resolve) => {
-      Alert.alert(
-        "ตรวจสอบชั่วโมงจิตอาสา",
-        `AI ตรวจพบ ${hours} ชั่วโมงจิตอาสาในเอกสารนี้\nชั่วโมงรวมปัจจุบัน: ${
-          volunteerHours + hours
-        } ชั่วโมง`,
-        [
-          { text: "ยกเลิก", style: "cancel", onPress: () => resolve(false) },
-          { text: "ใช้ไฟล์นี้", onPress: () => resolve(true) },
-        ]
-      );
-    });
-  };
-
-  const handleAIValidationError = (error) => {
-    return new Promise((resolve) => {
-      Alert.alert(
-        "เกิดข้อผิดพลาดในการตรวจสอบ",
-        `ไม่สามารถตรวจสอบเอกสารด้วย AI ได้: ${error.message}\nคุณต้องการดำเนินการต่อหรือไม่?`,
-        [
-          { text: "ลองใหม่", style: "cancel", onPress: () => resolve(false) },
-          { text: "ดำเนินการต่อ", onPress: () => resolve(true) },
-        ]
-      );
-    });
-  };
-
-  // Storage operations
+  // Upload file to Firebase Storage
   const uploadFileToStorage = async (
     file,
     docId,
@@ -472,15 +735,18 @@ const UploadScreen = ({ navigation, route }) => {
         .replace(/[.#$[\]/\\]/g, "_")
         .replace(/\s+/g, "_");
 
+      // Use PDF extension for converted files, or original extension
       const fileExtension = file.convertedFromImage
         ? "pdf"
         : file.filename?.split(".").pop() || "unknown";
+
       const academicYear = config?.academicYear || "2568";
       const term = config?.term || "1";
       const storagePath = `student_documents/${sanitizedStudentName}/${academicYear}/term_${term}/${studentId}_${docId}.${fileExtension}`;
 
       const response = await fetch(file.uri);
       const blob = await response.blob();
+
       const storageRef = ref(storage, storagePath);
       const uploadTask = uploadBytesResumable(storageRef, blob);
 
@@ -495,7 +761,10 @@ const UploadScreen = ({ navigation, route }) => {
               [`${docId}_${fileIndex}`]: Math.round(progress),
             }));
           },
-          (error) => reject(error),
+          (error) => {
+            console.error("Upload error:", error);
+            reject(error);
+          },
           async () => {
             try {
               const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
@@ -506,19 +775,19 @@ const UploadScreen = ({ navigation, route }) => {
               });
 
               resolve({
-                downloadURL,
-                storagePath,
-                uploadedAt: new Date().toISOString(),
-                originalFileName: file.filename,
-                fileSize: file.size,
-                mimeType: file.mimeType,
-                academicYear,
-                term,
-                studentFolder: sanitizedStudentName,
+                downloadURL: downloadURL ?? null,
+                storagePath: storagePath ?? null,
+                uploadedAt: new Date().toISOString() ?? null,
+                originalFileName: file.filename ?? null,
+                fileSize: file.size ?? null,
+                mimeType: file.mimeType ?? null,
+                academicYear: academicYear ?? null,
+                term: term ?? null,
+                studentFolder: sanitizedStudentName ?? null,
                 ...(file.convertedFromImage && {
                   convertedFromImage: true,
-                  originalImageName: file.originalImageName,
-                  originalImageType: file.originalImageType,
+                  originalImageName: file.originalImageName ?? null,
+                  originalImageType: file.originalImageType ?? null,
                 }),
               });
             } catch (error) {
@@ -533,539 +802,10 @@ const UploadScreen = ({ navigation, route }) => {
     }
   };
 
-  // Document handling
-  const handleFileUpload = async (docId, allowMultiple = true) => {
-    try {
-      const DocumentPicker = await import("expo-document-picker");
-      const result = await DocumentPicker.getDocumentAsync({
-        type: [
-          "image/*",
-          "image/jpeg",
-          "image/jpg",
-          "image/png",
-          "image/gif",
-          "image/bmp",
-          "image/webp",
-        ],
-        copyToCacheDirectory: true,
-        multiple: allowMultiple,
-      });
-
-      if (result.canceled) return;
-
-      const files = result.assets;
-      let processedFiles = [];
-
-      if (docId === "form_101") {
-        processedFiles = await processForm101Files(files, docId);
-      } else {
-        processedFiles = await processOtherDocumentFiles(files, docId);
-      }
-
-      if (processedFiles.length > 0) {
-        await updateUploadsWithFiles(docId, processedFiles);
-      }
-    } catch (error) {
-      Alert.alert("เกิดข้อผิดพลาด", "ไม่สามารถเลือกไฟล์ได้");
-      console.error(error);
-    }
-  };
-
-  const processForm101Files = async (files, docId) => {
-    if (files.length > 4) {
-      Alert.alert(
-        "ข้อผิดพลาด",
-        "เอกสาร Form 101 สามารถอัปโหลดได้สูงสุด 4 ไฟล์เท่านั้น"
-      );
-      return [];
-    }
-
-    const imagesToProcess = files.filter((file) =>
-      isImageFile(file.mimeType, file.name)
-    );
-    const otherFiles = files.filter(
-      (file) => !isImageFile(file.mimeType, file.name)
-    );
-    const processedFiles = [];
-
-    // Process non-image files
-    for (const file of otherFiles) {
-      const validatedFile = await processAndValidateFile(
-        file,
-        docId,
-        processedFiles.length
-      );
-      if (validatedFile) processedFiles.push(validatedFile);
-    }
-
-    // Process images
-    if (imagesToProcess.length > 0) {
-      const mergedFile = await mergeAndValidateImages(imagesToProcess, docId);
-      if (mergedFile) processedFiles.push(mergedFile);
-    }
-
-    return processedFiles;
-  };
-
-  const processOtherDocumentFiles = async (files, docId) => {
-    const processedFiles = [];
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const processedFile = await processSingleFile(
-        file,
-        docId,
-        i,
-        processedFiles.length
-      );
-      if (processedFile) processedFiles.push(processedFile);
-    }
-
-    return processedFiles;
-  };
-
-  const processAndValidateFile = async (file, docId, currentIndex) => {
-    const fileWithMetadata = createFileMetadata(file, docId, currentIndex);
-
-    if (needsAIValidation(docId)) {
-      const isValid = await performAIValidation(fileWithMetadata, docId);
-      if (!isValid) return null;
-    }
-
-    return fileWithMetadata;
-  };
-
-  const mergeAndValidateImages = async (images, docId) => {
-    setIsConvertingToPDF((prev) => ({ ...prev, [`${docId}_merge`]: true }));
-
-    try {
-      const mergedPdfFile = await mergeImagesToPdf(images, docId);
-
-      if (needsAIValidation(docId)) {
-        const isValid = await performAIValidation(mergedPdfFile, docId);
-        if (!isValid) return null;
-      }
-
-      return mergedPdfFile;
-    } catch (error) {
-      console.error("Error merging images to PDF:", error);
-      Alert.alert(
-        "ข้อผิดพลาด",
-        `ไม่สามารถรวมรูปภาพเป็น PDF ได้: ${error.message}`
-      );
-      return null;
-    } finally {
-      setIsConvertingToPDF((prev) => {
-        const newState = { ...prev };
-        delete newState[`${docId}_merge`];
-        return newState;
-      });
-    }
-  };
-
-  const processSingleFile = async (
-    file,
-    docId,
-    originalIndex,
-    currentIndex
-  ) => {
-    let processedFile = file;
-    const originalMetadata = {
-      filename: file.filename ?? file.name,
-      mimeType: file.mimeType,
-      size: file.size,
-      uri: file.uri,
-    };
-
-    if (isImageFile(file.mimeType, file.name)) {
-      try {
-        const convertedPdf = await convertImageToPDF(
-          file,
-          docId,
-          originalIndex
-        );
-        processedFile = { ...originalMetadata, ...convertedPdf };
-      } catch (conversionError) {
-        console.error("PDF conversion failed:", conversionError);
-        Alert.alert(
-          "การแปลงล้มเหลว",
-          `ไม่สามารถแปลงไฟล์ "${
-            file.name ?? "ไม่ทราบชื่อไฟล์"
-          }" เป็น PDF ได้ จะใช้ไฟล์ต้นฉบับแทน`
-        );
-        processedFile = file;
-      }
-    }
-
-    if (needsAIValidation(docId)) {
-      const isValid = await performAIValidation(processedFile, docId);
-      if (!isValid) return null;
-    }
-
-    return createFileMetadata(
-      processedFile,
-      docId,
-      currentIndex,
-      processedFile.convertedFromImage
-    );
-  };
-
-  const createFileMetadata = (file, docId, fileIndex, isConverted = false) => {
-    const metadata = {
-      filename: file.filename,
-      uri: file.uri,
-      mimeType: file.mimeType,
-      size: file.size,
-      uploadDate: new Date().toLocaleString("th-TH"),
-      status: "pending",
-      aiValidated: needsAIValidation(docId),
-      fileIndex,
-    };
-
-    if (isConverted) {
-      metadata.convertedFromImage = true;
-      metadata.originalImageName = file.originalImageName;
-      metadata.originalImageType = file.originalImageType;
-    }
-
-    return metadata;
-  };
-
-  const updateUploadsWithFiles = async (docId, processedFiles) => {
-    const newUploads = {
-      ...uploads,
-      [docId]: [...(uploads[docId] || []), ...processedFiles],
-    };
-
-    setUploads(newUploads);
-    await saveUploadsToFirebase(newUploads);
-  };
-
-  const handleRemoveFile = async (docId, fileIndex = null) => {
-    const docFiles = uploads[docId] || [];
-
-    if (fileIndex !== null && fileIndex >= 0 && fileIndex < docFiles.length) {
-      await removeSingleFile(docId, fileIndex, docFiles);
-    } else {
-      await removeAllFiles(docId, docFiles);
-    }
-  };
-
-  const removeSingleFile = async (docId, fileIndex, docFiles) => {
-    const fileToRemove = docFiles[fileIndex];
-
-    Alert.alert(
-      "ลบไฟล์",
-      `คุณต้องการลบไฟล์ "${fileToRemove.filename}" หรือไม่?`,
-      [
-        { text: "ยกเลิก", style: "cancel" },
-        {
-          text: "ลบ",
-          style: "destructive",
-          onPress: () => executeFileRemoval(docId, fileIndex, docFiles),
-        },
-      ]
-    );
-  };
-
-  const removeAllFiles = async (docId, docFiles) => {
-    Alert.alert(
-      "ลบไฟล์ทั้งหมด",
-      `คุณต้องการลบไฟล์ทั้งหมด (${docFiles.length} ไฟล์) สำหรับเอกสารนี้หรือไม่?`,
-      [
-        { text: "ยกเลิก", style: "cancel" },
-        {
-          text: "ลบทั้งหมด",
-          style: "destructive",
-          onPress: () => executeAllFilesRemoval(docId, docFiles),
-        },
-      ]
-    );
-  };
-
-  const executeFileRemoval = async (docId, fileIndex, docFiles) => {
-    const fileToRemove = docFiles[fileIndex];
-    await cleanupTemporaryFile(fileToRemove);
-
-    const newFiles = docFiles.filter((_, index) => index !== fileIndex);
-    await updateUploadsAfterRemoval(docId, newFiles, fileIndex !== null);
-  };
-
-  const executeAllFilesRemoval = async (docId, docFiles) => {
-    await Promise.all(docFiles.map((file) => cleanupTemporaryFile(file)));
-    await updateUploadsAfterRemoval(docId, [], false);
-  };
-
-  const cleanupTemporaryFile = async (file) => {
-    if (file.convertedFromImage && file.uri) {
-      try {
-        await FileSystem.deleteAsync(file.uri, { idempotent: true });
-      } catch (cleanupError) {
-        console.warn("Could not clean up temporary file:", cleanupError);
-      }
-    }
-  };
-
-  const updateUploadsAfterRemoval = async (docId, newFiles, isSingleFile) => {
-    const newUploads = { ...uploads };
-
-    if (newFiles.length === 0) {
-      delete newUploads[docId];
-    } else {
-      newFiles.forEach((file, index) => {
-        file.fileIndex = index;
-      });
-      newUploads[docId] = newFiles;
-    }
-
-    if (docId === "volunteer_doc") {
-      const newHours = calculateVolunteerHoursFromUploads(newUploads);
-      setVolunteerHours(newHours);
-    }
-
-    setUploads(newUploads);
-    await saveUploadsToFirebase(newUploads);
-    if (isSingleFile) handleCloseModal();
-  };
-
-  // Submission handling
-  const handleSubmitDocuments = async () => {
-    if (!validateRequiredDocuments()) return;
-
-    setIsSubmitting(true);
-
-    try {
-      const submissionResult = await processDocumentSubmission();
-      if (submissionResult) {
-        showSubmissionSuccess(submissionResult);
-      }
-    } catch (error) {
-      handleSubmissionError(error);
-    } finally {
-      setIsSubmitting(false);
-      setStorageUploadProgress({});
-    }
-  };
-
-  const validateRequiredDocuments = () => {
-    const documents = generateDocumentsList(surveyData);
-    const requiredDocs = documents.filter((doc) => doc.required);
-    const uploadedRequiredDocs = requiredDocs.filter(
-      (doc) => uploads[doc.id]?.length > 0
-    );
-
-    if (uploadedRequiredDocs.length < requiredDocs.length) {
-      Alert.alert(
-        "เอกสารไม่ครบ",
-        `คุณยังอัปโหลดเอกสารไม่ครบ (${uploadedRequiredDocs.length}/${requiredDocs.length})`,
-        [{ text: "ตกลง" }]
-      );
-      return false;
-    }
-    return true;
-  };
-
-  const processDocumentSubmission = async () => {
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      Alert.alert("เกิดข้อผิดพลาด", "ไม่พบข้อมูลผู้ใช้");
-      return null;
-    }
-
-    const userInfo = await getUserInfo(currentUser.uid);
-    const storageUploads = await uploadAllFilesToStorage(
-      currentUser.uid,
-      userInfo
-    );
-
-    return await createSubmission(currentUser, userInfo, storageUploads);
-  };
-
-  const getUserInfo = async (userId) => {
-    const userRef = doc(db, "users", userId);
-    const userDoc = await getDoc(userRef);
-
-    if (userDoc.exists()) {
-      const userData = userDoc.data();
-      return {
-        studentId: userData.student_id || "Unknown_Student",
-        studentName:
-          userData.profile?.student_name ||
-          userData.name ||
-          userData.nickname ||
-          "Unknown_Student",
-        citizenId: userData.citizen_id,
-      };
-    }
-
-    return {
-      studentId: "Unknown_Student",
-      studentName: "Unknown_Student",
-      citizenId: "Unknown_CitizenID",
-    };
-  };
-
-  const uploadAllFilesToStorage = async (userId, userInfo) => {
-    const storageUploads = {};
-
-    for (const [docId, files] of Object.entries(uploads)) {
-      const uploadedFiles = [];
-
-      for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
-        const file = files[fileIndex];
-        try {
-          const storageData = await uploadFileToStorage(
-            file,
-            docId,
-            fileIndex,
-            userId,
-            userInfo.studentName,
-            appConfig,
-            userInfo.studentId
-          );
-
-          uploadedFiles.push(
-            createStorageFileMetadata(file, storageData, fileIndex)
-          );
-        } catch (error) {
-          console.error(`Failed to upload file ${file.filename}:`, error);
-          Alert.alert(
-            "ข้อผิดพลาดในการอัปโหลด",
-            `ไม่สามารถอัปโหลดไฟล์ ${file.filename} ได้: ${error.message}`
-          );
-          throw error;
-        }
-      }
-
-      storageUploads[docId] = uploadedFiles;
-    }
-
-    return storageUploads;
-  };
-
-  const createStorageFileMetadata = (file, storageData, fileIndex) => {
-    return {
-      filename: storageData.originalFileName,
-      mimeType: storageData.mimeType,
-      size: storageData.fileSize,
-      downloadURL: storageData.downloadURL,
-      storagePath: storageData.storagePath,
-      uploadedAt: storageData.uploadedAt,
-      storageUploaded: true,
-      status: "uploaded_to_storage",
-      fileIndex,
-      convertedFromImage: storageData.convertedFromImage || false,
-      originalImageName: storageData.originalImageName,
-      originalImageType: storageData.originalImageType,
-    };
-  };
-
-  const createSubmission = async (currentUser, userInfo, storageUploads) => {
-    const academicYear = appConfig?.academicYear || "2568";
-    const term = appConfig?.term || "1";
-
-    const submissionData = {
-      userId: currentUser.uid,
-      userEmail: currentUser.email,
-      student_id: userInfo.studentId,
-      citizen_id: userInfo.citizenId,
-      surveyData,
-      uploads: storageUploads,
-      submittedAt: new Date().toISOString(),
-      status: "submitted",
-      academicYear,
-      term,
-      submissionTerm: term,
-      documentStatuses: createDocumentStatuses(storageUploads),
-    };
-
-    const submissionRef = doc(
-      db,
-      `document_submissions_${academicYear}_${term}`,
-      currentUser.uid
-    );
-    await setDoc(submissionRef, submissionData);
-
-    await updateUserSubmissionInfo(currentUser.uid, storageUploads, term);
-
-    return {
-      submissionData,
-      totalFiles: calculateTotalFiles(storageUploads),
-      convertedFiles: calculateConvertedFiles(storageUploads),
-    };
-  };
-
-  const createDocumentStatuses = (storageUploads) => {
-    const statuses = {};
-    Object.keys(storageUploads).forEach((docId) => {
-      statuses[docId] = {
-        status: "pending",
-        reviewedAt: null,
-        reviewedBy: null,
-        comments: "",
-        fileCount: storageUploads[docId].length,
-      };
-    });
-    return statuses;
-  };
-
-  const updateUserSubmissionInfo = async (userId, storageUploads, term) => {
-    const userRef = doc(db, "users", userId);
-    await updateDoc(userRef, {
-      lastSubmissionAt: new Date().toISOString(),
-      hasSubmittedDocuments: true,
-      uploads: storageUploads,
-      lastSubmissionTerm: term,
-    });
-  };
-
-  const calculateTotalFiles = (storageUploads) => {
-    return Object.values(storageUploads).reduce(
-      (sum, files) => sum + files.length,
-      0
-    );
-  };
-
-  const calculateConvertedFiles = (storageUploads) => {
-    return Object.values(storageUploads)
-      .flat()
-      .filter((file) => file.convertedFromImage).length;
-  };
-
-  const showSubmissionSuccess = (result) => {
-    let successMessage = `เอกสารของคุณได้ถูกส่งและอัปโหลดเรียบร้อยแล้ว\nจำนวนไฟล์: ${result.totalFiles} ไฟล์`;
-
-    if (result.convertedFiles > 0) {
-      successMessage += `\nไฟล์ที่แปลงเป็น PDF: ${result.convertedFiles} ไฟล์`;
-    }
-
-    successMessage += `\nปีการศึกษา: ${appConfig?.academicYear} เทอม: ${appConfig?.term}\nคุณสามารถติดตามได้ในหน้าแสดงผล`;
-
-    Alert.alert("ส่งเอกสารสำเร็จ", successMessage, [
-      {
-        text: "ดูสถานะ",
-        onPress: () => {
-          navigation.push("DocumentStatusScreen", {
-            submissionData: result.submissionData,
-          });
-        },
-      },
-    ]);
-  };
-
-  const handleSubmissionError = (error) => {
-    console.error("Error submitting documents:", error);
-    Alert.alert(
-      "เกิดข้อผิดพลาด",
-      `ไม่สามารถส่งเอกสารได้: ${error.message}\nกรุณาลองใหม่อีกครั้ง`
-    );
-  };
-
-  // Survey management
+  // Delete survey data
   const deleteSurveyData = async () => {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
-
     try {
       const userRef = doc(db, "users", currentUser.uid);
       await updateDoc(userRef, {
@@ -1078,6 +818,7 @@ const UploadScreen = ({ navigation, route }) => {
     }
   };
 
+  // Handle retake survey
   const handleRetakeSurvey = () => {
     Alert.alert(
       "ทำแบบสอบถามใหม่",
@@ -1099,6 +840,7 @@ const UploadScreen = ({ navigation, route }) => {
     );
   };
 
+  // Handle start survey
   const handleStartSurvey = () => {
     navigation.navigate("Document Reccommend", {
       onSurveyComplete: (data) => {
@@ -1107,7 +849,607 @@ const UploadScreen = ({ navigation, route }) => {
     });
   };
 
-  // Modal handlers
+  const handleFileUpload = async (docId, allowMultiple = true) => {
+    try {
+      const DocumentPicker = await import("expo-document-picker");
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          "image/*",
+          "image/jpeg",
+          "image/jpg",
+          "image/png",
+          "image/gif",
+          "image/bmp",
+          "image/webp",
+        ],
+        copyToCacheDirectory: true,
+        multiple: allowMultiple,
+      });
+
+      if (result.canceled) return;
+
+      const files = result.assets;
+      const processedFiles = [];
+
+      if (docId === "form_101") {
+        if (files.length > 4) {
+          Alert.alert(
+            "ข้อผิดพลาด",
+            "เอกสาร Form 101 สามารถอัปโหลดได้สูงสุด 4 ไฟล์เท่านั้น"
+          );
+          return;
+        }
+
+        const imagesToProcess = files.filter((file) =>
+          isImageFile(file.mimeType, file.name)
+        );
+        const otherFiles = files.filter(
+          (file) => !isImageFile(file.mimeType, file.name)
+        );
+
+        // Process non-image files first
+        for (const file of otherFiles) {
+          const fileWithMetadata = {
+            filename: file.name ?? null,
+            uri: file.uri ?? null,
+            mimeType: file.mimeType ?? null,
+            size: file.size ?? null,
+            uploadDate: new Date().toLocaleString("th-TH"),
+            status: "pending",
+            aiValidated: needsAIValidation(docId),
+            fileIndex: (uploads[docId] || []).length + processedFiles.length,
+          };
+
+          // AI validation for non-image files
+          if (needsAIValidation(docId)) {
+            console.log(
+              `🔥 FORM 101 NON-IMAGE - Starting AI validation for ${file.name}...`
+            );
+            const isValid = await performAIValidation(fileWithMetadata, docId);
+            if (!isValid) {
+              console.log(
+                `❌ FORM 101 NON-IMAGE - AI validation failed for ${file.name}`
+              );
+              continue; // Skip this file if validation fails
+            }
+            console.log(
+              `✅ FORM 101 NON-IMAGE - AI validation passed for ${file.name}`
+            );
+          }
+
+          processedFiles.push(fileWithMetadata);
+        }
+
+        // Process and merge images if any
+        if (imagesToProcess.length > 0) {
+          setIsConvertingToPDF((prev) => ({
+            ...prev,
+            [`${docId}_merge`]: true,
+          }));
+
+          try {
+            console.log(
+              `🔥 FORM 101 IMAGES - Merging ${imagesToProcess.length} images to PDF...`
+            );
+            const mergedPdfFile = await mergeImagesToPdf(
+              imagesToProcess,
+              docId
+            );
+
+            // AI validation for the merged PDF - THIS WAS MISSING!
+            if (needsAIValidation(docId)) {
+              console.log(`🔥 FORM 101 MERGED PDF - Starting AI validation...`);
+              const isValid = await performAIValidation(mergedPdfFile, docId);
+              if (!isValid) {
+                console.log(`❌ FORM 101 MERGED PDF - AI validation failed`);
+                setIsConvertingToPDF((prev) => {
+                  const newState = { ...prev };
+                  delete newState[`${docId}_merge`];
+                  return newState;
+                });
+                return; // Don't add the file if validation fails
+              }
+              console.log(`✅ FORM 101 MERGED PDF - AI validation passed`);
+            }
+
+            processedFiles.push(mergedPdfFile);
+          } catch (error) {
+            console.error("Error merging images to PDF:", error);
+            Alert.alert(
+              "ข้อผิดพลาด",
+              `ไม่สามารถรวมรูปภาพเป็น PDF ได้: ${error.message}`
+            );
+            setIsConvertingToPDF((prev) => {
+              const newState = { ...prev };
+              delete newState[`${docId}_merge`];
+              return newState;
+            });
+            return;
+          } finally {
+            setIsConvertingToPDF((prev) => {
+              const newState = { ...prev };
+              delete newState[`${docId}_merge`];
+              return newState;
+            });
+          }
+        }
+      } else {
+        // Handle other document types (existing logic)
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          let processedFile = file;
+          let originalMetadata = {
+            filename: file.filename ?? file.name ?? null,
+            mimeType: file.mimeType ?? null,
+            size: file.size ?? null,
+            uri: file.uri ?? null,
+          };
+
+          if (isImageFile(file.mimeType, file.name)) {
+            try {
+              const convertedPdf = await convertImageToPDF(file, docId, i);
+              processedFile = {
+                ...originalMetadata,
+                ...convertedPdf,
+                filename: convertedPdf.filename,
+                mimeType: "application/pdf",
+              };
+            } catch (conversionError) {
+              console.error("PDF conversion failed:", conversionError);
+              Alert.alert(
+                "การแปลงล้มเหลว",
+                `ไม่สามารถแปลงไฟล์ "${
+                  file.name ?? "ไม่ทราบชื่อไฟล์"
+                }" เป็น PDF ได้ จะใช้ไฟล์ต้นฉบับแทน`
+              );
+              processedFile = file;
+            }
+          } else {
+            processedFile = originalMetadata;
+          }
+
+          // 🔥 แก้ไขส่วนนี้: เรียกใช้ performAIValidation อย่างถูกต้อง
+          if (needsAIValidation(docId)) {
+            const isValid = await performAIValidation(processedFile, docId);
+            if (!isValid) {
+              console.log(
+                `❌ AI validation failed for ${docId}, skipping file`
+              );
+              continue; // ข้ามไฟล์นี้ถ้า validation ไม่ผ่าน
+            }
+            console.log(`✅ AI validation passed for ${docId}`);
+          }
+
+          const fileWithMetadata = {
+            filename: processedFile.filename ?? null,
+            uri: processedFile.uri ?? null,
+            mimeType: processedFile.mimeType ?? null,
+            size: processedFile.size ?? null,
+            uploadDate: new Date().toLocaleString("th-TH"),
+            status: "pending",
+            aiValidated: needsAIValidation(docId),
+            fileIndex: (uploads[docId] || []).length + processedFiles.length,
+            ...(processedFile.convertedFromImage !== undefined && {
+              convertedFromImage: processedFile.convertedFromImage ?? false,
+              originalImageName: processedFile.originalImageName ?? null,
+              originalImageType: processedFile.originalImageType ?? null,
+            }),
+          };
+
+          processedFiles.push(fileWithMetadata);
+        }
+      }
+
+      // Only update uploads if we have processed files (validation passed)
+      if (processedFiles.length > 0) {
+        const newUploads = {
+          ...uploads,
+          [docId]: [...(uploads[docId] || []), ...processedFiles],
+        };
+
+        setUploads(newUploads);
+        await saveUploadsToFirebase(newUploads);
+        console.log(
+          `✅ Successfully added ${processedFiles.length} files for ${docId}`
+        );
+      } else {
+        console.log(
+          `❌ No files were added for ${docId} - all validations failed or user cancelled`
+        );
+      }
+    } catch (error) {
+      Alert.alert("เกิดข้อผิดพลาด", "ไม่สามารถเลือกไฟล์ได้");
+      console.error(error);
+    }
+  };
+
+  // Rest of the component methods remain the same...
+  // Updated: Handle remove specific file from document
+  const handleRemoveFile = async (docId, fileIndex = null) => {
+  const docFiles = uploads[docId] || [];
+
+    const cleanupAIValidationData = async (fileToRemove) => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        console.warn('No authenticated user found for AI data cleanup');
+        return;
+      }
+
+      console.log(`🧹 Cleaning up AI validation data for file: ${fileToRemove.filename}`);
+      
+      // ลบข้อมูลจาก ai_validation_results collection
+      const { query, where, getDocs, deleteDoc, doc: firestoreDoc } = await import('firebase/firestore');
+      const validationsRef = collection(db, "ai_validation_results");
+      
+      // ค้นหา validation results ที่เกี่ยวข้องกับไฟล์นี้
+      const q = query(
+        validationsRef,
+        where("userId", "==", currentUser.uid),
+        where("documentType", "==", docId),
+        where("fileName", "==", fileToRemove.filename || `${docId}_file`)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const deletionPromises = [];
+      
+      querySnapshot.forEach((docSnapshot) => {
+        console.log(`🗑️ Deleting AI validation result: ${docSnapshot.id}`);
+        deletionPromises.push(deleteDoc(docSnapshot.ref));
+      });
+      
+      // ลบข้อมูล validation results ทั้งหมดที่เกี่ยวข้อง
+      await Promise.all(deletionPromises);
+      
+      // อัพเดตข้อมูล aiValidations ใน user document
+      const userRef = firestoreDoc(db, "users", currentUser.uid);
+      const userDoc = await getDoc(userRef);
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const aiValidations = userData.aiValidations || [];
+        
+        // กรองข้อมูลที่เกี่ยวข้องกับไฟล์ที่ลบออก
+        const updatedAiValidations = aiValidations.filter(validation => {
+          return !(validation.documentType === docId && 
+                  validation.fileName === (fileToRemove.filename || `${docId}_file`));
+        });
+        
+        // อัพเดต user document
+        await updateDoc(userRef, {
+          aiValidations: updatedAiValidations
+        });
+        
+        console.log(`✅ Cleaned up ${aiValidations.length - updatedAiValidations.length} AI validation entries from user document`);
+      }
+      
+      console.log(`✅ AI validation data cleanup completed for ${fileToRemove.filename}`);
+      
+    } catch (error) {
+      console.error('❌ Error cleaning up AI validation data:', error);
+      // ไม่ให้ error นี้หยุดการลบไฟล์หลัก
+    }
+  };
+
+  if (fileIndex !== null && fileIndex >= 0 && fileIndex < docFiles.length) {
+    // Remove specific file
+    const fileToRemove = docFiles[fileIndex];
+    Alert.alert(
+      "ลบไฟล์",
+      `คุณต้องการลบไฟล์ "${fileToRemove.filename}" หรือไม่?\n\n⚠️ ข้อมูลการตรวจสอบ AI ที่เกี่ยวข้องจะถูกลบด้วย`,
+      [
+        { text: "ยกเลิก", style: "cancel" },
+        {
+          text: "ลบ",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // 1. ลบข้อมูล AI validation ก่อน
+              await cleanupAIValidationData(fileToRemove);
+              
+              // 2. ลบไฟล์จาก array
+              const newFiles = docFiles.filter(
+                (_, index) => index !== fileIndex
+              );
+
+              // 3. Clean up temporary PDF files if they were converted from images
+              if (fileToRemove.convertedFromImage && fileToRemove.uri) {
+                try {
+                  await FileSystem.deleteAsync(fileToRemove.uri, {
+                    idempotent: true,
+                  });
+                  console.log("✓ Cleaned up temporary PDF file");
+                } catch (cleanupError) {
+                  console.warn(
+                    "Could not clean up temporary file:",
+                    cleanupError
+                  );
+                }
+              }
+
+              // 4. อัพเดต uploads state
+              const newUploads = { ...uploads };
+              if (newFiles.length === 0) {
+                delete newUploads[docId];
+              } else {
+                // Re-index remaining files
+                newFiles.forEach((file, index) => {
+                  file.fileIndex = index;
+                });
+                newUploads[docId] = newFiles;
+              }
+
+              // 5. อัพเดตชั่วโมงจิตอาสาหลังจากลบไฟล์
+              if (docId === "volunteer_doc") {
+                const newHours = calculateVolunteerHoursFromUploads(newUploads);
+                setVolunteerHours(newHours);
+                console.log(
+                  `🔄 Updated volunteer hours after deletion: ${newHours}`
+                );
+              }
+
+              // 6. บันทึกการเปลี่ยนแปลงลง Firebase
+              setUploads(newUploads);
+              await saveUploadsToFirebase(newUploads);
+              
+              console.log(`✅ Successfully removed file and cleaned up AI data: ${fileToRemove.filename}`);
+              handleCloseModal();
+              
+            } catch (error) {
+              console.error('❌ Error during file removal:', error);
+              Alert.alert(
+                "เกิดข้อผิดพลาด",
+                `ไม่สามารถลบไฟล์ได้: ${error.message}`
+              );
+            }
+          },
+        },
+      ]
+    );
+  } else {
+    // Remove all files for this document
+    Alert.alert(
+      "ลบไฟล์ทั้งหมด",
+      `คุณต้องการลบไฟล์ทั้งหมด (${docFiles.length} ไฟล์) สำหรับเอกสารนี้หรือไม่?\n\n⚠️ ข้อมูลการตรวจสอบ AI ทั้งหมดที่เกี่ยวข้องจะถูกลบด้วย`,
+      [
+        { text: "ยกเลิก", style: "cancel" },
+        {
+          text: "ลบทั้งหมด",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // 1. ลบข้อมูล AI validation สำหรับทุกไฟล์
+              const cleanupPromises = docFiles.map(file => cleanupAIValidationData(file));
+              await Promise.all(cleanupPromises);
+              
+              // 2. Clean up temporary PDF files
+              for (const file of docFiles) {
+                if (file.convertedFromImage && file.uri) {
+                  try {
+                    await FileSystem.deleteAsync(file.uri, {
+                      idempotent: true,
+                    });
+                  } catch (cleanupError) {
+                    console.warn(
+                      "Could not clean up temporary file:",
+                      cleanupError
+                    );
+                  }
+                }
+              }
+
+              // 3. อัพเดต uploads state
+              const newUploads = { ...uploads };
+              delete newUploads[docId];
+
+              // 4. รีเซ็ตชั่วโมงจิตอาสาหากลบเอกสารจิตอาสาทั้งหมด
+              if (docId === "volunteer_doc") {
+                setVolunteerHours(0);
+                console.log(
+                  "🔄 Reset volunteer hours to 0 after deleting all files"
+                );
+              }
+
+              // 5. บันทึกการเปลี่ยนแปลงลง Firebase
+              setUploads(newUploads);
+              await saveUploadsToFirebase(newUploads);
+              
+              console.log(`✅ Successfully removed all files and cleaned up AI data for document: ${docId}`);
+              handleCloseModal();
+              
+            } catch (error) {
+              console.error('❌ Error during bulk file removal:', error);
+              Alert.alert(
+                "เกิดข้อผิดพลาด",
+                `ไม่สามารถลบไฟล์ทั้งหมดได้: ${error.message}`
+              );
+            }
+          },
+        },
+      ]
+    );
+  }
+};
+
+  // Rest of the methods remain identical to the original file...
+  const handleSubmitDocuments = async () => {
+    const documents = generateDocumentsList({
+    ...surveyData,
+    term: term,
+    academicYear: academicYear,
+    birth_date: birthDate  // เพิ่มบรรทัดนี้
+  });
+    const requiredDocs = documents.filter((doc) => doc.required);
+    const uploadedRequiredDocs = requiredDocs.filter(
+      (doc) => uploads[doc.id] && uploads[doc.id].length > 0
+    );
+
+    if (uploadedRequiredDocs.length < requiredDocs.length) {
+      Alert.alert(
+        "เอกสารไม่ครบ",
+        `คุณยังอัปโหลดเอกสารไม่ครบ (${uploadedRequiredDocs.length}/${requiredDocs.length})`,
+        [{ text: "ตกลง" }]
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        Alert.alert("เกิดข้อผิดพลาด", "ไม่พบข้อมูลผู้ใช้");
+        setIsSubmitting(false);
+        return;
+      }
+
+      let studentId = "Unknown_Student";
+      let studentName = "Unknown_Student";
+      let citizenId = "Unknown_CitizenID";
+
+      try {
+        const userRef = doc(db, "users", currentUser.uid);
+        const userDoc = await getDoc(userRef);
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          studentId = userData.student_id || "Unknown_Student";
+          studentName =
+            userData.profile?.student_name ||
+            userData.name ||
+            userData.nickname ||
+            "Unknown_Student";
+          citizenId = userData.citizen_id;
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+      }
+
+      const storageUploads = {};
+      const academicYear = appConfig?.academicYear || "2568";
+      const term = appConfig?.term || "1";
+
+      // Upload all files for each document
+      for (const [docId, files] of Object.entries(uploads)) {
+        const uploadedFiles = [];
+
+        for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+          const file = files[fileIndex];
+          try {
+            const storageData = await uploadFileToStorage(
+              file,
+              docId,
+              fileIndex,
+              currentUser.uid,
+              studentName,
+              appConfig,
+              studentId
+            );
+
+            uploadedFiles.push({
+              filename: storageData.originalFileName ?? null,
+              mimeType: storageData.mimeType ?? null,
+              size: storageData.fileSize ?? null,
+              downloadURL: storageData.downloadURL ?? null,
+              storagePath: storageData.storagePath ?? null,
+              uploadedAt: storageData.uploadedAt ?? null,
+              storageUploaded: true,
+              status: "uploaded_to_storage",
+              fileIndex: fileIndex,
+              convertedFromImage: storageData.convertedFromImage ?? false,
+              originalImageName: storageData.originalImageName ?? null,
+              originalImageType: storageData.originalImageType ?? null,
+            });
+          } catch (error) {
+            console.error(`Failed to upload file ${file.filename}:`, error);
+            Alert.alert(
+              "ข้อผิดพลาดในการอัปโหลด",
+              `ไม่สามารถอัปโหลดไฟล์ ${file.filename} ได้: ${error.message}`
+            );
+            setIsSubmitting(false);
+            return;
+          }
+        }
+
+        storageUploads[docId] = uploadedFiles;
+      }
+
+      const submissionData = {
+        userId: currentUser.uid ?? null,
+        userEmail: currentUser.email ?? null,
+        student_id: studentId ?? null,
+        citizen_id: citizenId ?? null,
+        surveyData: surveyData ?? null,
+        uploads: storageUploads ?? {},
+        submittedAt: new Date().toISOString() ?? null,
+        status: "submitted" ?? null,
+        academicYear: academicYear ?? null,
+        term: term ?? null,
+        submissionTerm: `${term}` ?? null,
+      };
+
+      submissionData.documentStatuses = {};
+      Object.keys(storageUploads).forEach((docId) => {
+        submissionData.documentStatuses[docId] = {
+          status: "pending",
+          reviewedAt: null,
+          reviewedBy: null,
+          comments: "",
+          fileCount: storageUploads[docId].length,
+        };
+      });
+
+      const submissionRef = doc(
+        db,
+        `document_submissions_${academicYear}_${term}`,
+        currentUser.uid
+      );
+      await setDoc(submissionRef, submissionData);
+
+      const userRef = doc(db, "users", currentUser.uid);
+      await updateDoc(userRef, {
+        lastSubmissionAt: new Date().toISOString() ?? null,
+        hasSubmittedDocuments: true,
+        uploads: storageUploads ?? {},
+        lastSubmissionTerm: `${term}` ?? null,
+      });
+
+      const totalFiles = Object.values(storageUploads).reduce(
+        (sum, files) => sum + files.length,
+        0
+      );
+      const convertedFiles = Object.values(storageUploads)
+        .flat()
+        .filter((file) => file.convertedFromImage).length;
+
+      let successMessage = `เอกสารของคุณได้ถูกส่งและอัปโหลดเรียบร้อยแล้ว\nจำนวนไฟล์: ${totalFiles} ไฟล์`;
+      if (convertedFiles > 0) {
+        successMessage += `\nไฟล์ที่แปลงเป็น PDF: ${convertedFiles} ไฟล์`;
+      }
+      successMessage += `\nปีการศึกษา: ${academicYear} เทอม: ${term}\nคุณสามารถติดตามได้ในหน้าแสดงผล`;
+
+      Alert.alert("ส่งเอกสารสำเร็จ", successMessage, [
+        {
+          text: "ดูสถานะ",
+          onPress: () => {
+            navigation.push("DocumentStatusScreen", {
+              submissionData: submissionData,
+            });
+          },
+        },
+      ]);
+    } catch (error) {
+      console.error("Error submitting documents:", error);
+      Alert.alert(
+        "เกิดข้อผิดพลาด",
+        `ไม่สามารถส่งเอกสารได้: ${error.message}\nกรุณาลองใหม่อีกครั้ง`
+      );
+    } finally {
+      setIsSubmitting(false);
+      setStorageUploadProgress({});
+    }
+  };
+
+  // Modal handlers and other utility functions remain the same...
   const handleShowFileModal = async (docId, docTitle, fileIndex = 0) => {
     const files = uploads[docId];
     if (files && files[fileIndex]) {
@@ -1116,7 +1458,6 @@ const UploadScreen = ({ navigation, route }) => {
       setSelectedFileIndex(fileIndex);
       setShowFileModal(true);
       setIsLoadingContent(true);
-
       try {
         await loadFileContent(files[fileIndex]);
       } catch (error) {
@@ -1135,14 +1476,20 @@ const UploadScreen = ({ navigation, route }) => {
 
       if (
         mimeType.startsWith("image/") ||
-        /\.(jpg|jpeg|png|gif|bmp|webp)$/.test(fileName)
+        fileName.endsWith(".jpg") ||
+        fileName.endsWith(".jpeg") ||
+        fileName.endsWith(".png") ||
+        fileName.endsWith(".gif") ||
+        fileName.endsWith(".bmp") ||
+        fileName.endsWith(".webp")
       ) {
         setContentType("image");
         setFileContent(file.uri);
       } else if (
         mimeType.includes("text/") ||
         mimeType.includes("json") ||
-        /\.(txt|json)$/.test(fileName)
+        fileName.endsWith(".txt") ||
+        fileName.endsWith(".json")
       ) {
         setContentType("text");
         const content = await FileSystem.readAsStringAsync(file.uri, {
@@ -1205,30 +1552,39 @@ const UploadScreen = ({ navigation, route }) => {
 
   // Utility functions
   const getUploadStats = () => {
-    const documents = generateDocumentsList(surveyData);
-    const requiredDocs = documents.filter((doc) => doc.required);
-    const uploadedDocs = documents.filter((doc) => uploads[doc.id]?.length > 0);
-    const uploadedRequiredDocs = requiredDocs.filter(
-      (doc) => uploads[doc.id]?.length > 0
-    );
+  // ต้องส่ง birth_date ไปด้วยเพื่อให้ generateDocumentsList ทำงานถูกต้อง
+  const documents = generateDocumentsList({
+    ...surveyData,
+    term: term,
+    academicYear: academicYear,
+    birth_date: birthDate  // เพิ่มบรรทัดนี้
+  });
+  
+  const requiredDocs = documents.filter((doc) => doc.required);
+  const uploadedDocs = documents.filter(
+    (doc) => uploads[doc.id] && uploads[doc.id].length > 0
+  );
+  const uploadedRequiredDocs = requiredDocs.filter(
+    (doc) => uploads[doc.id] && uploads[doc.id].length > 0
+  );
 
-    const totalFiles = Object.values(uploads).reduce(
-      (sum, files) => sum + files.length,
-      0
-    );
-    const convertedFiles = Object.values(uploads)
-      .flat()
-      .filter((file) => file.convertedFromImage).length;
+  const totalFiles = Object.values(uploads).reduce(
+    (sum, files) => sum + files.length,
+    0
+  );
+  const convertedFiles = Object.values(uploads)
+    .flat()
+    .filter((file) => file.convertedFromImage).length;
 
-    return {
-      total: documents.length,
-      required: requiredDocs.length,
-      uploaded: uploadedDocs.length,
-      uploadedRequired: uploadedRequiredDocs.length,
-      totalFiles,
-      convertedFiles,
-    };
+  return {
+    total: documents.length,
+    required: requiredDocs.length,
+    uploaded: uploadedDocs.length,
+    uploadedRequired: uploadedRequiredDocs.length,
+    totalFiles: totalFiles,
+    convertedFiles: convertedFiles,
   };
+};
 
   const formatFileSize = (bytes) => {
     if (bytes === 0) return "0 Bytes";
@@ -1256,8 +1612,11 @@ const UploadScreen = ({ navigation, route }) => {
         surveyData={surveyData}
         onRetakeSurvey={handleRetakeSurvey}
       />
+
       {appConfig && <TermInfoCard appConfig={appConfig} />}
+
       <ProgressCard stats={stats} />
+
       {(Object.keys(storageUploadProgress).length > 0 ||
         Object.keys(isConvertingToPDF).length > 0) && (
         <StorageProgressCard
@@ -1266,6 +1625,7 @@ const UploadScreen = ({ navigation, route }) => {
           isConvertingToPDF={isConvertingToPDF}
         />
       )}
+
       <DocumentsSection
         documents={documents}
         uploads={uploads}
@@ -1278,13 +1638,17 @@ const UploadScreen = ({ navigation, route }) => {
         aiBackendAvailable={aiBackendAvailable}
         volunteerHours={volunteerHours}
         isConvertingToPDF={isConvertingToPDF}
+        term={term}
+        birth_date={birthDate} // เพิ่มบรรทัดนี้หากจำเป็น
       />
+
       <SubmitSection
         stats={stats}
         isSubmitting={isSubmitting}
         storageUploadProgress={storageUploadProgress}
         onSubmit={handleSubmitDocuments}
       />
+
       <FileDetailModal
         visible={showFileModal}
         onClose={handleCloseModal}
@@ -1326,5 +1690,35 @@ const styles = StyleSheet.create({
     padding: 16,
   },
 });
+
+// ฟังก์ชันสำหรับดึงประวัติการตรวจสอบ AI (สำหรับใช้ในหน้าอื่น)
+export const getUserAIValidationHistory = async (userId, limit = 20) => {
+  try {
+    const { query, where, orderBy, getDocs, limitToLast } = await import('firebase/firestore');
+    
+    const validationsRef = collection(db, "ai_validation_results");
+    const q = query(
+      validationsRef,
+      where("userId", "==", userId),
+      orderBy("validatedAt", "desc"),
+      limitToLast(limit)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const validations = [];
+    
+    querySnapshot.forEach((doc) => {
+      validations.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    return validations;
+  } catch (error) {
+    console.error("Error fetching AI validation history:", error);
+    return [];
+  }
+};
 
 export default UploadScreen;
