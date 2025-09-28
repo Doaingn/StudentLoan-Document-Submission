@@ -11,9 +11,15 @@ const StudentDocumentSubmission = () => {
   const [statusFilter, setStatusFilter] = useState("pending");
   const [appConfig, setAppConfig] = useState(null);
   
+  // เพิ่ม state สำหรับฟิลเตอร์ปีการศึกษาและเทอม
+  const [yearFilter, setYearFilter] = useState("all");
+  const [termFilter, setTermFilter] = useState("all");
+  const [availableYears, setAvailableYears] = useState([]);
+  const [availableTerms, setAvailableTerms] = useState([]);
+  
   // Document type mappings in Thai
   const documentTypes = {
-    'form_101': 'กยศ 101',
+    'form_101': 'อยศ 101',
     'volunteer_doc' : 'เอกสารจิตอาสา',
     'id_copies_student': 'สำเนาบัตรประชาชนนักศึกษา',
     'consent_student_form': 'หนังสือยินยอมเปิดเผยข้อมูลนักศึกษา',
@@ -23,7 +29,7 @@ const StudentDocumentSubmission = () => {
     'consent_mother_form': 'หนังสือยินยอมเปิดเผยข้อมูลมารดา',
     'id_copies_mother': 'สำเนาบัตรประชาชนมารดา',
     'id_copies_consent_mother_form':'สำเนาบัตรประชาชนมารดา',
-    'guardian_consent' : 'หนังสือยินยอมเปิดเผยข้อมูลผู้ปกครอง',
+    'guardian_consent' : 'หนังสือยินยอมเปิดเผยข้อมูลผู้ปกครong',
     'guardian_income_cert': 'หนังสือรับรองรายได้ผู้ปกครอง',
     'father_income_cert': 'หนังสือรับรองรายได้บิดา',
     'fa_id_copies_gov' : 'สำเนาบัตรข้าราชการผู้รับรอง',
@@ -80,25 +86,58 @@ const StudentDocumentSubmission = () => {
       }
     };
 
+  // ฟังก์ชันสำหรับดึงข้อมูลจากทุก collection ที่มี pattern document_submissions_
+  const fetchAllSubmissions = async () => {
+    try {
+      // ดึงรายการ collections ทั้งหมด (จำลองการค้นหา pattern)
+      const years = ['2566', '2567', '2568']; // สามารถปรับเป็น dynamic ได้
+      const terms = ['1', '2'];
+      
+      let allSubmissions = [];
+      let allYears = new Set();
+      let allTerms = new Set();
+
+      for (const year of years) {
+        for (const term of terms) {
+          try {
+            const submissionsRef = collection(db, `document_submissions_${year}_${term}`);
+            const submissionsSnap = await getDocs(submissionsRef);
+            
+            if (!submissionsSnap.empty) {
+              submissionsSnap.forEach((doc) => {
+                const data = { id: doc.id, ...doc.data() };
+                data.academicYear = year;
+                data.submissionTerm = term;
+                allSubmissions.push(data);
+                allYears.add(year);
+                allTerms.add(term);
+              });
+            }
+          } catch (error) {
+            // Collection ไม่มี - ข้ามไป
+            console.log(`Collection document_submissions_${year}_${term} not found`);
+          }
+        }
+      }
+
+      setAvailableYears(Array.from(allYears).sort());
+      setAvailableTerms(Array.from(allTerms).sort());
+      
+      return allSubmissions;
+    } catch (error) {
+      console.error("Error fetching all submissions:", error);
+      return [];
+    }
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
       
       const config = await fetchAppConfig();
-      if (!config || !config.academicYear || !config.term) {
-        console.error("Failed to fetch academicYear or term from app config. Aborting data fetch.");
-        setLoading(false);
-        return;
-      }
-
-      // Fetch document submissions dynamically
-      const submissionsRef = collection(db, `document_submissions_${config.academicYear}_${config.term}`);
-      const submissionsSnap = await getDocs(submissionsRef);
-      const submissionsData = [];
-
-      submissionsSnap.forEach((doc) => {
-        submissionsData.push({ id: doc.id, ...doc.data() });
-      });
+      
+      // ดึงข้อมูลจากทุก collection
+      const submissionsData = await fetchAllSubmissions();
 
       // Fetch users data
       const usersRef = collection(db, "users");
@@ -125,15 +164,16 @@ const StudentDocumentSubmission = () => {
     comments
   ) => {
     try {
-      const config = await fetchAppConfig();
-      if (!config || !config.academicYear || !config.term) {
-        console.error("Failed to fetch academicYear or term from app config. Aborting update.");
+      // หา submission ที่ต้องการอัปเดต
+      const submission = submissions.find(s => s.id === submissionId);
+      if (!submission) {
+        console.error("Submission not found");
         return;
       }
-      
+
       const submissionRef = doc(
         db,
-        `document_submissions_${config.academicYear}_${config.term}`,
+        `document_submissions_${submission.academicYear}_${submission.submissionTerm}`,
         submissionId
       );
 
@@ -177,13 +217,14 @@ const StudentDocumentSubmission = () => {
   // ฟังก์ชันสำหรับอัพเดทหลายๆ เอกสารพร้อมกัน
   const updateMultipleDocuments = async (submissionId, documentTypes, status, comments) => {
     try {
-      const config = await fetchAppConfig();
-      if (!config || !config.academicYear || !config.term) {
-        console.error("Failed to fetch academicYear or term from app config. Aborting bulk update.");
+      // หา submission ที่ต้องการอัปเดต
+      const submission = submissions.find(s => s.id === submissionId);
+      if (!submission) {
+        console.error("Submission not found");
         return;
       }
       
-      const submissionRef = doc(db, `document_submissions_${config.academicYear}_${config.term}`, submissionId);
+      const submissionRef = doc(db, `document_submissions_${submission.academicYear}_${submission.submissionTerm}`, submissionId);
       const updateData = {};
 
       // สร้าง updateData สำหรับเอกสารหลายตัว
@@ -224,19 +265,32 @@ const StudentDocumentSubmission = () => {
   };
 
   const filteredSubmissions = submissions.filter((submission) => {
-    const userName = users[submission.userId]?.name || "";
-    const matchesSearch = userName
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase());
+    const user = users[submission.userId] || {};
+    const userName = user.name || "";
+    const studentId = submission.student_id || "";
+    const citizenId = submission.citizen_id || "";
 
-    if (statusFilter === "all") return matchesSearch;
+    // Enhanced search - ค้นหาชื่อ, รหัสนักศึกษา, และเลขบัตรประจำตัวประชาชน
+    const searchLower = searchTerm.toLowerCase();
+    const matchesSearch = userName.toLowerCase().includes(searchLower) ||
+                         studentId.toLowerCase().includes(searchLower) ||
+                         citizenId.toLowerCase().includes(searchLower);
 
-    // Check if any document has the selected status
-    const hasStatus = Object.values(submission.documentStatuses || {}).some(
-      (doc) => doc.status === statusFilter
-    );
+    // Year filter
+    const matchesYear = yearFilter === "all" || submission.academicYear === yearFilter;
+    
+    // Term filter  
+    const matchesTerm = termFilter === "all" || submission.submissionTerm === termFilter;
 
-    return matchesSearch && hasStatus;
+    // Status filter
+    let matchesStatus = true;
+    if (statusFilter !== "all") {
+      matchesStatus = Object.values(submission.documentStatuses || {}).some(
+        (doc) => doc.status === statusFilter
+      );
+    }
+
+    return matchesSearch && matchesYear && matchesTerm && matchesStatus;
   });
 
   const DocumentViewer = ({ submission }) => {
@@ -473,7 +527,7 @@ const StudentDocumentSubmission = () => {
                               }
                             />
                             <div style={styles.fileName}>
-                              เล็งที่เอกสาร Ctrl + ลูกกลิ้งเมาส์ เพื่อ
+                              เล็งที่เอกสาร Ctrl + ลูกคลิ้งเมาส์ เพื่อ
                               ซูมเข้า/ออก {file.originalFileName}
                             </div>
                           </div>
@@ -488,7 +542,7 @@ const StudentDocumentSubmission = () => {
                               />
                             </div>
                             <div style={styles.fileName}>
-                              เล็งที่เอกสาร Ctrl + ลูกกลิ้งเมาส์ เพื่อ
+                              เล็งที่เอกสาร Ctrl + ลูกคลิ้งเมาส์ เพื่อ
                               ซูมเข้า/ออก {file.originalFileName}
                             </div>
                           </div>
@@ -558,16 +612,38 @@ const StudentDocumentSubmission = () => {
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.header}>ระบบตรวจสอบเอกสารนักเรียน</h1>
+      <h1 style={styles.header}>ระบบตรวจสอบเอกสารนักศึกษา</h1>
 
       <div style={styles.filterContainer}>
         <input
           type="text"
-          placeholder="ค้นหาชื่อนักเรียน..."
+          placeholder="ค้นหาชื่อ, รหัสนักศึกษา, หรือเลขบัตรประชาชน..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           style={styles.input}
         />
+
+        <select
+          value={yearFilter}
+          onChange={(e) => setYearFilter(e.target.value)}
+          style={styles.select}
+        >
+          <option value="all">ทุกปีการศึกษา</option>
+          {availableYears.map(year => (
+            <option key={year} value={year}>ปีการศึกษา {year}</option>
+          ))}
+        </select>
+
+        <select
+          value={termFilter}
+          onChange={(e) => setTermFilter(e.target.value)}
+          style={styles.select}
+        >
+          <option value="all">ทุกเทอม</option>
+          {availableTerms.map(term => (
+            <option key={term} value={term}>เทอม {term}</option>
+          ))}
+        </select>
 
         <select
           value={statusFilter}
@@ -579,6 +655,38 @@ const StudentDocumentSubmission = () => {
           <option value="rejected">เอกสารไม่ถูกต้อง</option>
           <option value="all">ทุกสถานะ</option>
         </select>
+      </div>
+
+      {/* แสดงสถิติการกรอง */}
+      <div style={styles.statsContainer}>
+        <div style={styles.statItem}>
+          <span style={styles.statNumber}>{filteredSubmissions.length}</span>
+          <span style={styles.statLabel}>รายการทั้งหมด</span>
+        </div>
+        <div style={styles.statItem}>
+          <span style={styles.statNumber}>
+            {filteredSubmissions.filter(s => 
+              Object.values(s.documentStatuses || {}).some(doc => doc.status === 'pending')
+            ).length}
+          </span>
+          <span style={styles.statLabel}>รอตรวจสอบ</span>
+        </div>
+        <div style={styles.statItem}>
+          <span style={styles.statNumber}>
+            {filteredSubmissions.filter(s => 
+              Object.values(s.documentStatuses || {}).some(doc => doc.status === 'approved')
+            ).length}
+          </span>
+          <span style={styles.statLabel}>ผ่านแล้ว</span>
+        </div>
+        <div style={styles.statItem}>
+          <span style={styles.statNumber}>
+            {filteredSubmissions.filter(s => 
+              Object.values(s.documentStatuses || {}).some(doc => doc.status === 'rejected')
+            ).length}
+          </span>
+          <span style={styles.statLabel}>ไม่ผ่าน</span>
+        </div>
       </div>
 
       <div style={styles.postsContainer}>
@@ -606,7 +714,10 @@ const StudentDocumentSubmission = () => {
 
               <div style={styles.postDescription}>
                 <p style={styles.infoLine}>
-                  <strong>อีเมล:</strong> {submission.userEmail}
+                  <strong>รหัสนักศึกษา:</strong> {submission.student_id}
+                </p>
+                <p style={styles.infoLine}>
+                  <strong>เลขประจำตัวประชาชน:</strong> {submission.citizen_id}
                 </p>
                 <p style={styles.infoLine}>
                   <strong>ปีการศึกษา:</strong> {submission.academicYear}
@@ -679,7 +790,7 @@ const styles = {
   filterContainer: {
     display: "flex",
     gap: 15,
-    marginBottom: 30,
+    marginBottom: 20,
     alignItems: "center",
     flexWrap: "wrap",
     justifyContent: "center",
@@ -690,7 +801,7 @@ const styles = {
     border: "1px solid #ccc",
     borderRadius: 8,
     boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
-    minWidth: 250,
+    minWidth: 300,
   },
   select: {
     padding: 12,
@@ -699,7 +810,35 @@ const styles = {
     borderRadius: 8,
     boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
     backgroundColor: "#fff",
-    minWidth: 180,
+    minWidth: 150,
+  },
+  // สถิติการกรอง
+  statsContainer: {
+    display: "flex",
+    gap: 20,
+    marginBottom: 30,
+    justifyContent: "center",
+    flexWrap: "wrap",
+  },
+  statItem: {
+    background: "#f8f9fa",
+    padding: 20,
+    borderRadius: 12,
+    textAlign: "center",
+    minWidth: 120,
+    border: "1px solid #e9ecef",
+  },
+  statNumber: {
+    display: "block",
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#007bff",
+    marginBottom: 5,
+  },
+  statLabel: {
+    fontSize: 14,
+    color: "#6c757d",
+    fontWeight: "500",
   },
   loadingText: {
     fontSize: 18,
@@ -709,7 +848,7 @@ const styles = {
   },
   postsContainer: {
     display: "grid",
-    gridTemplateColumns: "repeat(5, 1fr)",
+    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
     gap: 20,
   },
   postCard: {
