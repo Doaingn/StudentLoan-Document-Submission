@@ -38,7 +38,7 @@ const DocumentsSection = ({
         ];
       case "2":
       case "3":
-        return ["borrower_id_card", "guardian_id_card"];
+        return ["id_copies_student", "guardian_id_copies"];
       default:
         return [];
     }
@@ -263,7 +263,7 @@ const DocumentsSection = ({
     } else if (term === "2" || term === "3") {
       // Term 2/3 AI validation badges
       if (
-        ["borrower_id_card", "guardian_id_card"].includes(doc.id) &&
+        ["id_copies_student", "guardian_id_copies"].includes(doc.id) &&
         file.aiValidated
       ) {
         return (
@@ -390,7 +390,7 @@ const DocumentsSection = ({
           );
         }
       } else if (term === "2" || term === "3") {
-        if (["borrower_id_card", "guardian_id_card"].includes(docId)) {
+        if (["id_copies_student", "guardian_id_copies"].includes(docId)) {
           return (
             <View style={[styles.aiBadge, styles.idAiBadge]}>
               <Ionicons name="card-outline" size={12} color="#dc2626" />
@@ -435,7 +435,7 @@ const DocumentsSection = ({
         warningText = "AI ตรวจสอบบัตรประชาชนไม่พร้อมใช้งาน";
       }
     } else if (term === "2" || term === "3") {
-      if (["borrower_id_card", "guardian_id_card"].includes(doc.id)) {
+      if (["id_copies_student", "guardian_id_copies"].includes(doc.id)) {
         warningText = "AI ตรวจสอบบัตรประชาชนไม่พร้อมใช้งาน";
       }
     }
