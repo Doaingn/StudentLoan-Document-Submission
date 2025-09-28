@@ -72,6 +72,8 @@ const DocumentCard = ({ docId, filesData, submissionData, onFilePress, onReuploa
       'guardian_id_copies' : 'สำเนาบัตรประชาชนผู้ปกครอง',
       'guardian_income' : 'หนังสือรับรองเงินเดือนผู้ปกครอง',
       'guar_id_copies_gov' : 'สำเนาบัตรข้าราชการผู้รับรอง',
+      'disbursement_form' : 'แบบยืนยันการเบิกเงินกู้ยืม',
+      'expense_burden_form' : 'ใบภาระค่าใช้จ่ายทุน',
     };
 
     // เพิ่มข้อความ 'บิดา' หรือ 'มารดา' สำหรับเอกสาร 'single_parent_income_cert' และ 'single_parent_income'
