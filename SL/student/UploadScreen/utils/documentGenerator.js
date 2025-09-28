@@ -577,7 +577,7 @@ export const getAIValidationDocuments = () => {
         "id_copies_mother",
 
         // เทอม 2/3
-        "expense_burden_form"
+        "expense_burden_form",
         "guardian_id_copies"
     ];
 };
