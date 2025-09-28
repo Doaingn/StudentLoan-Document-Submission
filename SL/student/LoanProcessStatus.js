@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,9 @@ const LoanProcessStatus = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submissionData, setSubmissionData] = useState(null);
+  const [appConfig, setAppConfig] = useState(null);
+  const [academicYear, setAcademicYear] = useState(null);
+  const [term, setTerm] = useState(null);
 
   const processSteps = [
     {
@@ -39,29 +42,55 @@ const LoanProcessStatus = ({ navigation }) => {
     },
   ];
 
+
+  // 1. โหลด config ก่อน
   useEffect(() => {
-    fetchProcessStatus();
-    // Set up real-time listener for process status updates
-    const setupRealtimeListener = () => {
-      const userId = auth.currentUser?.uid;
-      if (!userId) return;
-
-      const processDocRef = doc(db, "loan_process_status", userId);
-      const unsubscribe = onSnapshot(processDocRef, (doc) => {
-        if (doc.exists()) {
-          setProcessStatus(doc.data());
+    const configRef = doc(db, "DocumentService", "config");
+    const configUnsubscribe = onSnapshot(
+      configRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const config = docSnap.data();
+          setAppConfig(config);
+          setAcademicYear(config.academicYear);
+          setTerm(config.term);
+        } else {
+          const defaultConfig = { academicYear: "2567", term: "1" };
+          setAppConfig(defaultConfig);
+          setAcademicYear(defaultConfig.academicYear);
+          setTerm(defaultConfig.term);
         }
-      });
-
-      return unsubscribe;
-    };
-
-    const unsubscribe = setupRealtimeListener();
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
+      },
+      (error) => {
+        console.error("Error listening to app config:", error);
+      }
+    );
+    return () => configUnsubscribe();
   }, []);
 
+  // 2. ประกาศชื่อคอลเลกชันครั้งเดียว (ตามปี/เทอม)
+  const processCollectionName = useMemo(() => {
+    if (!academicYear || !term) return null;
+    return `loan_process_status_${academicYear}_${term}`;
+  }, [academicYear, term]);
+
+  // 3. ตั้ง listener
+  useEffect(() => {
+    if (!processCollectionName) return;
+    const userId = auth.currentUser?.uid;
+    if (!userId) return;
+
+    const processDocRef = doc(db, processCollectionName, userId);
+    const unsubscribe = onSnapshot(processDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setProcessStatus(docSnap.data());
+      }
+    });
+
+    return () => unsubscribe();
+  }, [processCollectionName]);
+
+  // 4. ฟังก์ชัน fetch ข้อมูลครั้งแรก/refresh
   const fetchProcessStatus = async () => {
     try {
       const userId = auth.currentUser?.uid;
@@ -70,42 +99,17 @@ const LoanProcessStatus = ({ navigation }) => {
         navigation.goBack();
         return;
       }
+      if (!processCollectionName) return;
 
-      // Fetch process status
-      const processDocRef = doc(db, "loan_process_status", userId);
+      // ดึง process status จากคอลเลกชันเดียวกัน
+      const processDocRef = doc(db, processCollectionName, userId);
       const processDoc = await getDoc(processDocRef);
 
       if (processDoc.exists()) {
         setProcessStatus(processDoc.data());
-      } else {
-        // Initialize default status if doesn't exist
-        const defaultStatus = {
-          currentStep: "document_collection",
-          steps: {
-            document_collection: {
-              status: "in_progress",
-              updatedAt: new Date().toISOString(),
-              note: "เริ่มกระบวนการรวบรวมเอกสาร",
-            },
-            document_organization: {
-              status: "pending",
-              updatedAt: null,
-              note: null,
-            },
-            bank_submission: {
-              status: "pending",
-              updatedAt: null,
-              note: null,
-            },
-          },
-          overallStatus: "processing",
-          createdAt: new Date().toISOString(),
-          lastUpdatedAt: new Date().toISOString(),
-        };
-        setProcessStatus(defaultStatus);
       }
 
-      // Also fetch submission data for display
+      // ดึงข้อมูล submission ถ้ามี
       const submissionDocRef = doc(db, "document_submissions", userId);
       const submissionDoc = await getDoc(submissionDocRef);
       if (submissionDoc.exists()) {
@@ -118,6 +122,11 @@ const LoanProcessStatus = ({ navigation }) => {
       setIsLoading(false);
     }
   };
+
+  // 5. โหลดครั้งแรก
+  useEffect(() => {
+    if (processCollectionName) fetchProcessStatus();
+  }, [processCollectionName]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -342,8 +351,7 @@ const LoanProcessStatus = ({ navigation }) => {
           </View>
           <Text style={styles.infoText}>
             • เจ้าหน้าที่จะอัพเดทสถานะให้คุณทราบในแต่ละขั้นตอน{"\n"}•
-            กระบวนการทั้งหมดอาจใช้เวลา 3-5 วันทำการ{"\n"}•
-            หากมีข้อสงสัยสามารถติดต่อเจ้าหน้าที่ได้
+            หากมีข้อสงสัยสามารถติดต่อที่เบอร์ 044 223 774
           </Text>
         </View>
       </ScrollView>
