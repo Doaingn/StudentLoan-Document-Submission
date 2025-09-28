@@ -130,7 +130,7 @@ const LoanProcessManagement = () => {
       // Fetch existing process statuses
       const processStatusesData = {};
       for (const submission of submissionsData) {
-        const statusDoc = await getDoc(doc(db, 'loan_process_status', submission.userId));
+        const statusDoc = await getDoc(doc(db, `loan_process_status_${config.academicYear}_${config.term}`, submission.userId));
         if (statusDoc.exists()) {
           processStatusesData[submission.userId] = statusDoc.data();
         }
@@ -148,7 +148,7 @@ const LoanProcessManagement = () => {
 
   const updateProcessStatus = async (userId, stepId, status, note) => {
     try {
-      const processDocRef = doc(db, 'loan_process_status', userId);
+      const processDocRef = doc(db, `loan_process_status_${appConfig.academicYear}_${appConfig.term}`, userId);
       
       // Get current process status or create default
       let currentStatus = processStatuses[userId];
@@ -459,7 +459,7 @@ const LoanProcessManagement = () => {
       <div style={styles.filterContainer}>
         <input
           type="text"
-          placeholder="ค้นหาชื่อผู้กู้..."
+          placeholder="ค้นหาชื่อนักศึกษา..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           style={styles.input}
@@ -594,6 +594,8 @@ const LoanProcessManagement = () => {
               </div>
 
               <div style={styles.userInfo}>
+                <p><strong>รหัสนักศึกษา:</strong> {submission.student_id}</p>
+                <p><strong>เลขประจำตัวประชาชน:</strong> {submission.citizen_id}</p>
                 <p><strong>อีเมล:</strong> {submission.userEmail}</p>
                 <p><strong>วันที่ส่งเอกสาร:</strong> {new Date(submission.submittedAt).toLocaleDateString('th-TH')}</p>
                 <p><strong>ขั้นตอนปัจจุบัน:</strong> {currentStep?.title || 'รวบรวมเอกสาร'}</p>
