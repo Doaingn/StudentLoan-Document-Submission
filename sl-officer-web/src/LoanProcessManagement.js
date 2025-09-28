@@ -20,6 +20,13 @@ const LoanProcessManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [appConfig, setAppConfig] = useState(null);
   
+  // เพิ่ม state สำหรับฟิลเตอร์ปีการศึกษาและเทอม
+  const [yearFilter, setYearFilter] = useState("all");
+  const [termFilter, setTermFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [availableYears, setAvailableYears] = useState([]);
+  const [availableTerms, setAvailableTerms] = useState([]);
+  
   // Bulk selection states
   const [selectedUsers, setSelectedUsers] = useState(new Set());
   const [selectAll, setSelectAll] = useState(false);
@@ -89,34 +96,88 @@ const LoanProcessManagement = () => {
     }
   };
 
+  // ฟังก์ชันสำหรับดึงข้อมูลจากทุก collection ที่มี pattern document_submissions_ และ loan_process_status_
+  const fetchAllSubmissions = async () => {
+    try {
+      // ดึงรายการ collections ทั้งหมด (จำลองการค้นหา pattern)
+      const years = ['2566', '2567', '2568']; // สามารถปรับเป็น dynamic ได้
+      const terms = ['1', '2'];
+      
+      let allSubmissions = [];
+      let allProcessStatuses = {};
+      let allYears = new Set();
+      let allTerms = new Set();
+
+      for (const year of years) {
+        for (const term of terms) {
+          try {
+            // ดึงข้อมูล document submissions
+            const submissionsRef = collection(db, `document_submissions_${year}_${term}`);
+            const submissionsSnap = await getDocs(submissionsRef);
+            
+            if (!submissionsSnap.empty) {
+              const yearTermSubmissions = [];
+              
+              submissionsSnap.forEach((doc) => {
+                const data = doc.data();
+                // Check if all documents are approved
+                const allApproved = Object.values(data.documentStatuses || {}).every(
+                  doc => doc.status === 'approved'
+                );
+                
+                if (allApproved && Object.keys(data.documentStatuses || {}).length > 0) {
+                  const submissionData = { 
+                    id: doc.id, 
+                    ...data, 
+                    academicYear: year,
+                    submissionTerm: term
+                  };
+                  yearTermSubmissions.push(submissionData);
+                  allYears.add(year);
+                  allTerms.add(term);
+                }
+              });
+
+              allSubmissions = allSubmissions.concat(yearTermSubmissions);
+
+              // ดึงข้อมูล process statuses สำหรับ submissions ที่มีการอนุมัติ
+              for (const submission of yearTermSubmissions) {
+                try {
+                  const statusDoc = await getDoc(doc(db, `loan_process_status_${year}_${term}`, submission.userId));
+                  if (statusDoc.exists()) {
+                    allProcessStatuses[submission.userId] = statusDoc.data();
+                  }
+                } catch (error) {
+                  console.log(`Process status for user ${submission.userId} in ${year}_${term} not found`);
+                }
+              }
+            }
+          } catch (error) {
+            // Collection ไม่มี - ข้ามไป
+            console.log(`Collection document_submissions_${year}_${term} not found`);
+          }
+        }
+      }
+
+      setAvailableYears(Array.from(allYears).sort());
+      setAvailableTerms(Array.from(allTerms).sort());
+      
+      return { submissions: allSubmissions, processStatuses: allProcessStatuses };
+    } catch (error) {
+      console.error("Error fetching all submissions:", error);
+      return { submissions: [], processStatuses: {} };
+    }
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
 
       // Fetch app configuration first
       const config = await fetchAppConfig();
-      if (!config) {
-        console.error("Failed to fetch app configuration. Aborting data fetch.");
-        setLoading(false);
-        return;
-      }
 
-      // Use the fetched academicYear and term in the collection path
-      const submissionsRef = collection(db, `document_submissions_${config.academicYear}_${config.term}`);
-      const submissionsSnap = await getDocs(submissionsRef);
-      const submissionsData = [];
-
-      submissionsSnap.forEach((doc) => {
-        const data = doc.data();
-        // Check if all documents are approved
-        const allApproved = Object.values(data.documentStatuses || {}).every(
-          doc => doc.status === 'approved'
-        );
-        
-        if (allApproved && Object.keys(data.documentStatuses || {}).length > 0) {
-          submissionsData.push({ id: doc.id, ...data });
-        }
-      });
+      // ดึงข้อมูลจากทุก collection
+      const { submissions, processStatuses } = await fetchAllSubmissions();
 
       // Fetch users data
       const usersRef = collection(db, "users");
@@ -127,18 +188,9 @@ const LoanProcessManagement = () => {
         usersData[doc.id] = doc.data();
       });
 
-      // Fetch existing process statuses
-      const processStatusesData = {};
-      for (const submission of submissionsData) {
-        const statusDoc = await getDoc(doc(db, `loan_process_status_${config.academicYear}_${config.term}`, submission.userId));
-        if (statusDoc.exists()) {
-          processStatusesData[submission.userId] = statusDoc.data();
-        }
-      }
-
-      setApprovedSubmissions(submissionsData);
+      setApprovedSubmissions(submissions);
       setUsers(usersData);
-      setProcessStatuses(processStatusesData);
+      setProcessStatuses(processStatuses);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -148,7 +200,14 @@ const LoanProcessManagement = () => {
 
   const updateProcessStatus = async (userId, stepId, status, note) => {
     try {
-      const processDocRef = doc(db, `loan_process_status_${appConfig.academicYear}_${appConfig.term}`, userId);
+      // หา submission ที่ตรงกับ userId เพื่อใช้ academicYear และ term ที่ถูกต้อง
+      const submission = approvedSubmissions.find(s => s.userId === userId);
+      if (!submission) {
+        console.error("Submission not found for userId:", userId);
+        return;
+      }
+
+      const processDocRef = doc(db, `loan_process_status_${submission.academicYear}_${submission.submissionTerm}`, userId);
       
       // Get current process status or create default
       let currentStatus = processStatuses[userId];
@@ -312,8 +371,32 @@ const LoanProcessManagement = () => {
   };
 
   const filteredSubmissions = approvedSubmissions.filter((submission) => {
-    const userName = users[submission.userId]?.name || "";
-    return userName.toLowerCase().includes(searchTerm.toLowerCase());
+    const user = users[submission.userId] || {};
+    const userName = user.name || "";
+    const studentId = submission.student_id || "";
+    const citizenId = submission.citizen_id || "";
+
+    // Enhanced search - ค้นหาชื่อ, รหัสนักศึกษา, และเลขบัตรประจำตัวประชาชน
+    const searchLower = searchTerm.toLowerCase();
+    const matchesSearch = userName.toLowerCase().includes(searchLower) ||
+                         studentId.toLowerCase().includes(searchLower) ||
+                         citizenId.toLowerCase().includes(searchLower);
+
+    // Year filter
+    const matchesYear = yearFilter === "all" || submission.academicYear === yearFilter;
+    
+    // Term filter  
+    const matchesTerm = termFilter === "all" || submission.submissionTerm === termFilter;
+
+    // Status filter
+    let matchesStatus = true;
+    if (statusFilter !== "all") {
+      const userProcessStatus = processStatuses[submission.userId];
+      const overallStatus = userProcessStatus?.overallStatus || 'processing';
+      matchesStatus = overallStatus === statusFilter;
+    }
+
+    return matchesSearch && matchesYear && matchesTerm && matchesStatus;
   });
 
   const getStatusIcon = (status) => {
@@ -459,13 +542,68 @@ const LoanProcessManagement = () => {
       <div style={styles.filterContainer}>
         <input
           type="text"
-          placeholder="ค้นหาชื่อนักศึกษา..."
+          placeholder="ค้นหาชื่อ, รหัสนักศึกษา, หรือเลขบัตรประชาชน..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           style={styles.input}
         />
-        <div style={styles.countInfo}>
-          ผู้กู้ที่เอกสารอนุมัติครบ: {filteredSubmissions.length} คน
+
+        <select
+          value={yearFilter}
+          onChange={(e) => setYearFilter(e.target.value)}
+          style={styles.select}
+        >
+          <option value="all">ทุกปีการศึกษา</option>
+          {availableYears.map(year => (
+            <option key={year} value={year}>ปีการศึกษา {year}</option>
+          ))}
+        </select>
+
+        <select
+          value={termFilter}
+          onChange={(e) => setTermFilter(e.target.value)}
+          style={styles.select}
+        >
+          <option value="all">ทุกเทอม</option>
+          {availableTerms.map(term => (
+            <option key={term} value={term}>เทอม {term}</option>
+          ))}
+        </select>
+
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          style={styles.select}
+        >
+          <option value="all">ทุกสถานะ</option>
+          <option value="processing">กำลังดำเนินการ</option>
+          <option value="completed">เสร็จสิ้นทั้งหมด</option>
+        </select>
+      </div>
+
+      {/* สถิติการกรอง */}
+      <div style={styles.statsContainer}>
+        <div style={styles.statItem}>
+          <span style={styles.statNumber}>{filteredSubmissions.length}</span>
+          <span style={styles.statLabel}>รายการทั้งหมด</span>
+        </div>
+        <div style={styles.statItem}>
+          <span style={styles.statNumber}>
+            {filteredSubmissions.filter(s => {
+              const userProcessStatus = processStatuses[s.userId];
+              return userProcessStatus?.overallStatus === 'processing' || !userProcessStatus;
+            }).length}
+          </span>
+          <span style={styles.statLabel}>กำลังดำเนินการ</span>
+        </div>
+        <div style={styles.statItem}>
+          <span style={styles.statNumber}>
+            {filteredSubmissions.filter(s => {
+              const userProcessStatus = processStatuses[s.userId];
+              return userProcessStatus?.overallStatus === 'completed';
+            }).length}
+          </span>
+          <span style={styles.statLabel}>เสร็จสิ้นแล้ว</span>
         </div>
       </div>
 
@@ -596,6 +734,8 @@ const LoanProcessManagement = () => {
               <div style={styles.userInfo}>
                 <p><strong>รหัสนักศึกษา:</strong> {submission.student_id}</p>
                 <p><strong>เลขประจำตัวประชาชน:</strong> {submission.citizen_id}</p>
+                <p><strong>ปีการศึกษา:</strong> {submission.academicYear}</p>
+                <p><strong>เทอม:</strong> {submission.submissionTerm}</p>
                 <p><strong>อีเมล:</strong> {submission.userEmail}</p>
                 <p><strong>วันที่ส่งเอกสาร:</strong> {new Date(submission.submittedAt).toLocaleDateString('th-TH')}</p>
                 <p><strong>ขั้นตอนปัจจุบัน:</strong> {currentStep?.title || 'รวบรวมเอกสาร'}</p>
@@ -678,11 +818,11 @@ const styles = {
   },
   filterContainer: {
     display: "flex",
-    gap: 20,
+    gap: 15,
     marginBottom: 20,
     alignItems: "center",
     flexWrap: "wrap",
-    justifyContent: "space-between",
+    justifyContent: "center",
   },
   input: {
     padding: 12,
@@ -691,6 +831,43 @@ const styles = {
     borderRadius: 8,
     boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
     minWidth: 300,
+  },
+  select: {
+    padding: 12,
+    fontSize: 16,
+    border: "1px solid #ccc",
+    borderRadius: 8,
+    boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
+    backgroundColor: "#fff",
+    minWidth: 150,
+  },
+  // สถิติการกรอง
+  statsContainer: {
+    display: "flex",
+    gap: 20,
+    marginBottom: 20,
+    justifyContent: "center",
+    flexWrap: "wrap",
+  },
+  statItem: {
+    background: "#f8f9fa",
+    padding: 20,
+    borderRadius: 12,
+    textAlign: "center",
+    minWidth: 120,
+    border: "1px solid #e9ecef",
+  },
+  statNumber: {
+    display: "block",
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#007bff",
+    marginBottom: 5,
+  },
+  statLabel: {
+    fontSize: 14,
+    color: "#6c757d",
+    fontWeight: "500",
   },
   countInfo: {
     fontSize: 16,
@@ -939,14 +1116,6 @@ const styles = {
     color: "#333",
     marginBottom: 5,
     display: "block",
-  },
-  select: {
-    padding: 8,
-    fontSize: 14,
-    border: "1px solid #ccc",
-    borderRadius: 4,
-    backgroundColor: "#fff",
-    minWidth: 150,
   },
   textarea: {
     width: "100%",
