@@ -19,6 +19,30 @@ export const useFileManagement = (setUploads, setVolunteerHours, uploads) => {
     return totalHours;
   };
 
+  // ฟังก์ชันดึงชั่วโมงจิตอาสาจาก Firebase
+  const loadVolunteerHoursFromFirebase = async () => {
+    try {
+      const { doc, getDoc } = await import("firebase/firestore");
+      const { db, auth } = await import("../../../database/firebase");
+
+      const currentUser = auth.currentUser;
+      if (!currentUser) return 0;
+
+      const userRef = doc(db, "users", currentUser.uid);
+      const userDoc = await getDoc(userRef);
+
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        return userData.volunteerHours || 0;
+      }
+
+      return 0;
+    } catch (error) {
+      console.error("Error loading volunteer hours from Firebase:", error);
+      return 0;
+    }
+  };
+
   // Remove file with AI validation cleanup
   const handleRemoveFile = async (docId, fileIndex = null) => {
     const { cleanupAIValidationData } = await import(
@@ -26,6 +50,9 @@ export const useFileManagement = (setUploads, setVolunteerHours, uploads) => {
     );
     const { saveUploadsToFirebase } = await import(
       "../services/firebaseService"
+    );
+    const { saveVolunteerHoursToFirebase } = await import(
+      "../services/aiValidationService"
     );
 
     const docFiles = uploads[docId] || [];
@@ -83,6 +110,10 @@ export const useFileManagement = (setUploads, setVolunteerHours, uploads) => {
                   const newHours =
                     calculateVolunteerHoursFromUploads(newUploads);
                   setVolunteerHours(newHours);
+
+                  // บันทึกลง Firebase
+                  await saveVolunteerHoursToFirebase(newHours, {});
+
                   console.log(
                     `🔄 Updated volunteer hours after deletion: ${newHours}`
                   );
@@ -124,6 +155,9 @@ export const useFileManagement = (setUploads, setVolunteerHours, uploads) => {
                 const { saveUploadsToFirebase } = await import(
                   "../services/firebaseService"
                 );
+                const { saveVolunteerHoursToFirebase } = await import(
+                  "../services/aiValidationService"
+                );
 
                 // 1. ลบข้อมูล AI validation สำหรับทุกไฟล์
                 const cleanupPromises = docFiles.map((file) =>
@@ -154,6 +188,8 @@ export const useFileManagement = (setUploads, setVolunteerHours, uploads) => {
                 // 4. รีเซ็ตชั่วโมงจิตอาสาหากลบเอกสารจิตอาสาทั้งหมด
                 if (docId === "volunteer_doc") {
                   setVolunteerHours(0);
+                  // บันทึกลง Firebase
+                  await saveVolunteerHoursToFirebase(0, {});
                   console.log(
                     "🔄 Reset volunteer hours to 0 after deleting all files"
                   );
@@ -185,5 +221,6 @@ export const useFileManagement = (setUploads, setVolunteerHours, uploads) => {
     setIsConvertingToPDF,
     calculateVolunteerHoursFromUploads,
     handleRemoveFile,
+    loadVolunteerHoursFromFirebase,
   };
 };
