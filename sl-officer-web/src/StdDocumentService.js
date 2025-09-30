@@ -6,7 +6,28 @@ import {
   setDoc,
   updateDoc,
   serverTimestamp,
+  arrayUnion
 } from "firebase/firestore";
+
+// Document สำหรับเก็บประวัติปีการศึกษาและเทอมที่เคยมีการตั้งค่า
+const PERIODS_HISTORY_PATH = ["DocumentService", "submission_periods_history"];
+
+const logAcademicPeriod = async (year, term) => {
+  try {
+    const [collectionName, docId] = PERIODS_HISTORY_PATH;
+    const periodsRef = doc(db, collectionName, docId);
+
+    await setDoc(periodsRef, { 
+      availableYears: arrayUnion(year.toString()),
+      availableTerms: arrayUnion(term.toString()),
+    }, { merge: true }); // merge: true จะยังคง Array เดิมไว้และเพิ่มค่าใหม่เข้าไป
+
+    console.log(`Period ${year}/${term} logged to history successfully.`);
+  } catch (error) {
+    // บันทึก Error เพื่อตรวจสอบใน Console
+    console.error("Error logging academic period (History):", error); 
+  }
+};
 
 const StdDocumentService = () => {
   const [config, setConfig] = useState({
@@ -305,19 +326,27 @@ const StdDocumentService = () => {
 
   const saveConfig = async () => {
     try {
+      // 1. การทำงานเดิม: บันทึกการตั้งค่าปัจจุบัน
       const docRef = doc(db, "DocumentService", "config");
       const configToSave = {
-        ...config,
+        ...config, 
         lastUpdated: serverTimestamp(),
       };
 
       await updateDoc(docRef, configToSave);
+      
+      // 2. การทำงานใหม่: บันทึกปีการศึกษาและเทอมลงในทะเบียนประวัติ
+      // ตรวจสอบว่ามีข้อมูลปีและเทอมก่อนบันทึก
+      if (configToSave.academicYear && configToSave.term) {
+          await logAcademicPeriod(configToSave.academicYear, configToSave.term);
+      }
+      
       alert("บันทึกการตั้งค่าเรียบร้อย");
     } catch (error) {
       console.error("Error saving config:", error);
       alert("ข้อผิดพลาด: ไม่สามารถบันทึกข้อมูลได้");
     }
-  };
+};
 
   const getSystemStatus = () => {
     if (!config.isEnabled) {
