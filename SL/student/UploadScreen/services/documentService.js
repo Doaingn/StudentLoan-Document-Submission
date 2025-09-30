@@ -1,5 +1,6 @@
 import { Alert } from "react-native";
 import { mergeImagesToPdf } from "../utils/pdfMerger";
+import { auth } from "../../../database/firebase";
 import {
   convertImageToPDF,
   isImageFile,
@@ -311,3 +312,4 @@ export const prepareSubmissionData = async (uploads, surveyData, appConfig) => {
     term,
   };
 };
+
