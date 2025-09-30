@@ -19,6 +19,69 @@ import {
   needsAIValidation,
 } from "../documents_ai/UnifiedDocumentAI";
 
+// ฟังก์ชันสำหรับบันทึกชั่วโมงจิตอาสาลง Firebase
+export const saveVolunteerHoursToFirebase = async (totalHours, appConfig) => {
+  try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      console.error("No authenticated user found");
+      return false;
+    }
+
+    const userRef = doc(db, "users", currentUser.uid);
+    await updateDoc(userRef, {
+      volunteerHours: totalHours,
+      volunteerHoursUpdatedAt: new Date().toISOString(),
+      academicYear: appConfig?.academicYear || null,
+      term: appConfig?.term || null,
+    });
+
+    console.log(`✅ Volunteer hours saved to Firebase: ${totalHours} hours`);
+    return true;
+  } catch (error) {
+    console.error("❌ Error saving volunteer hours to Firebase:", error);
+    return false;
+  }
+};
+
+// ฟังก์ชันตรวจสอบไฟล์ซ้ำ
+export const checkDuplicateVolunteerFile = async (file, existingFiles) => {
+  try {
+    // ตรวจสอบจากชื่อไฟล์และขนาด
+    const isDuplicate = existingFiles.some(
+      (existingFile) =>
+        existingFile.filename === file.filename &&
+        existingFile.size === file.size
+    );
+
+    if (isDuplicate) {
+      console.log("❌ Duplicate file detected:", file.filename);
+      return true;
+    }
+
+    // ตรวจสอบจาก content hash (เพิ่มเติม)
+    const FileSystem = await import("expo-file-system/legacy");
+    const fileInfo = await FileSystem.getInfoAsync(file.uri);
+
+    if (fileInfo.exists) {
+      // สร้าง hash จาก URI และขนาดไฟล์ (แบบง่าย)
+      const fileHash = `${file.uri}_${file.size}`;
+
+      const contentDuplicate = existingFiles.some((existingFile) => {
+        const existingHash = `${existingFile.uri}_${existingFile.size}`;
+        return existingHash === fileHash;
+      });
+
+      return contentDuplicate;
+    }
+
+    return false;
+  } catch (error) {
+    console.error("Error checking duplicate file:", error);
+    return false;
+  }
+};
+
 // Save AI validation result to Firebase
 export const saveAIValidationResult = async (validationData) => {
   try {
@@ -213,7 +276,8 @@ export const performAIValidation = async (
   docId,
   volunteerHours,
   setVolunteerHours,
-  appConfig
+  appConfig,
+  uploads // เพิ่ม parameter uploads เพื่อตรวจสอบไฟล์ซ้ำ
 ) => {
   const aiBackendAvailable = await checkAIBackendStatus();
 
@@ -228,6 +292,24 @@ export const performAIValidation = async (
 
   try {
     console.log(`🤖 Starting AI validation for ${docId}`);
+
+    // ตรวจสอบไฟล์ซ้ำสำหรับเอกสารจิตอาสา
+    if (docId === "volunteer_doc") {
+      const existingFiles = uploads[docId] || [];
+      const isDuplicate = await checkDuplicateVolunteerFile(
+        file,
+        existingFiles
+      );
+
+      if (isDuplicate) {
+        Alert.alert(
+          "ไฟล์ซ้ำ",
+          "คุณได้อัพโหลดไฟล์นี้ไปแล้ว กรุณาเลือกไฟล์อื่น",
+          [{ text: "ตกลง" }]
+        );
+        return false;
+      }
+    }
 
     const validationResult = await validateDocument(
       file.uri,
@@ -257,7 +339,6 @@ export const performAIValidation = async (
       return new Promise((resolve) => {
         const newTotal = volunteerHours + hours;
 
-        // ใช้ Alert จาก parameter หรือ import โดยตรง
         const Alert = require("react-native").Alert;
         Alert.alert(
           "ตรวจสอบชั่วโมงจิตอาสา",
@@ -276,11 +357,17 @@ export const performAIValidation = async (
               onPress: async () => {
                 console.log("✓ User accepted volunteer document");
 
-                // อัพเดตชั่วโมงจิตอาสา
+                // อัพเดทชั่วโมงจิตอาสาใน state
                 setVolunteerHours(newTotal);
+
+                // บันทึกชั่วโมงจิตอาสาลง Firebase
+                await saveVolunteerHoursToFirebase(newTotal, appConfig);
 
                 // เก็บผลการตรวจสอบ AI ลงฐานข้อมูล
                 await saveAIValidationResult(validationDataForDB);
+
+                // ตั้งค่า hours ให้กับไฟล์
+                file.hours = hours;
 
                 if (newTotal >= 36) {
                   Alert.alert(
