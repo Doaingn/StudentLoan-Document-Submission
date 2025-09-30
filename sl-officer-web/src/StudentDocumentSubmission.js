@@ -19,7 +19,7 @@ const StudentDocumentSubmission = () => {
   
   // Document type mappings in Thai
   const documentTypes = {
-    'form_101': 'อยศ 101',
+    'form_101': 'กยศ 101',
     'volunteer_doc' : 'เอกสารจิตอาสา',
     'id_copies_student': 'สำเนาบัตรประชาชนนักศึกษา',
     'consent_student_form': 'หนังสือยินยอมเปิดเผยข้อมูลนักศึกษา',
@@ -88,49 +88,84 @@ const StudentDocumentSubmission = () => {
       }
     };
 
-  // ฟังก์ชันสำหรับดึงข้อมูลจากทุก collection ที่มี pattern document_submissions_
-  const fetchAllSubmissions = async () => {
-    try {
-      // ดึงรายการ collections ทั้งหมด (จำลองการค้นหา pattern)
-      const years = ['2566', '2567', '2568']; // สามารถปรับเป็น dynamic ได้
-      const terms = ['1', '2'];
-      
-      let allSubmissions = [];
-      let allYears = new Set();
-      let allTerms = new Set();
-
-      for (const year of years) {
-        for (const term of terms) {
-          try {
-            const submissionsRef = collection(db, `document_submissions_${year}_${term}`);
-            const submissionsSnap = await getDocs(submissionsRef);
-            
-            if (!submissionsSnap.empty) {
-              submissionsSnap.forEach((doc) => {
-                const data = { id: doc.id, ...doc.data() };
-                data.academicYear = year;
-                data.submissionTerm = term;
-                allSubmissions.push(data);
-                allYears.add(year);
-                allTerms.add(term);
-              });
-            }
-          } catch (error) {
-            // Collection ไม่มี - ข้ามไป
-            console.log(`Collection document_submissions_${year}_${term} not found`);
-          }
-        }
-      }
-
-      setAvailableYears(Array.from(allYears).sort());
-      setAvailableTerms(Array.from(allTerms).sort());
-      
-      return allSubmissions;
-    } catch (error) {
-      console.error("Error fetching all submissions:", error);
-      return [];
+    // ฟังก์ชันสำหรับดึงรายการปีการศึกษาและเทอมที่มีประวัติการเปิดระบบ
+const fetchAvailablePeriods = async () => {
+  try {
+    const periodsRef = doc(db, "DocumentService", "submission_periods_history");
+    const periodsDoc = await getDoc(periodsRef);
+    
+    if (periodsDoc.exists()) {
+      const data = periodsDoc.data();
+      // ดึง availableYears และ availableTerms หากไม่มีให้เป็น Array ว่าง
+      return {
+        years: Array.isArray(data.availableYears) ? data.availableYears : [],
+        // เทอมมักจะมีแค่ 1, 2, 3 ดังนั้นใช้ค่า Default เพื่อความชัวร์หากไม่มีประวัติเทอม
+        terms: Array.isArray(data.availableTerms) ? data.availableTerms : ['1', '2', '3'], 
+      };
     }
-  };
+    // กรณีที่ Document ประวัติยังไม่มีการสร้าง
+    return { years: [], terms: ['1', '2', '3'] }; 
+  } catch (error) {
+    console.error("Error fetching available periods:", error);
+    return { years: [], terms: ['1', '2', '3'] };
+  }
+};
+
+  // ฟังก์ชันสำหรับดึงข้อมูลจากทุก collection ที่มี pattern document_submissions_
+const fetchAllSubmissions = async () => {
+    try {
+        // 1. ดึงรายการปีและเทอมที่เคยมีการเปิดระบบจาก Document ประวัติ
+        const { years, terms } = await fetchAvailablePeriods();
+        
+        // หากไม่พบปีใด ๆ ในประวัติ จะไม่ดำเนินการดึงข้อมูล
+        if (years.length === 0) {
+            console.log("No available periods found in history. Skipping submission fetch.");
+            setAvailableYears([]);
+            setAvailableTerms(terms.sort());
+            return [];
+        }
+
+        let allSubmissions = [];
+        let fetchedYears = new Set();
+        let fetchedTerms = new Set();
+
+        // 2. วนลูปเพื่อดึงข้อมูลจาก Collection จริงตามปีและเทอมที่ได้มา
+        for (const year of years) {
+            for (const term of terms) {
+                try {
+                    // สร้างชื่อ Collection แบบ Dynamic
+                    const submissionsRef = collection(db, `document_submissions_${year}_${term}`);
+                    const submissionsSnap = await getDocs(submissionsRef);
+                    
+                    if (!submissionsSnap.empty) {
+                        submissionsSnap.forEach((doc) => {
+                            const data = { id: doc.id, ...doc.data() };
+                            data.academicYear = year;
+                            data.submissionTerm = term;
+                            allSubmissions.push(data);
+                        });
+                        // บันทึกเฉพาะปี/เทอมที่มีข้อมูลจริง
+                        fetchedYears.add(year);
+                        fetchedTerms.add(term);
+                    }
+                } catch (error) {
+                    // Collection ไม่มี - ข้ามไป (เงียบ ๆ)
+                    // console.log(`Collection document_submissions_${year}_${term} not found/error: ${error.message}`);
+                }
+            }
+        }
+
+        // 3. ตั้งค่า Years และ Terms ที่มีข้อมูลจริงสำหรับ Filter
+        // เรียงลำดับปีจากมากไปน้อย (ล่าสุดก่อน)
+        setAvailableYears(Array.from(fetchedYears).sort().reverse()); 
+        setAvailableTerms(Array.from(fetchedTerms).sort());
+        
+        return allSubmissions;
+    } catch (error) {
+        console.error("Error fetching all submissions:", error);
+        return [];
+    }
+};
 
   const fetchData = async () => {
     try {
