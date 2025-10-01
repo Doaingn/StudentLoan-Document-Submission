@@ -96,12 +96,39 @@ const LoanProcessManagement = () => {
     }
   };
 
+  // ฟังก์ชันสำหรับดึงรายการปีการศึกษาและเทอมที่มีประวัติการเปิดระบบ
+  const fetchAvailablePeriods = async () => {
+    try {
+      const periodsRef = doc(db, "DocumentService", "submission_periods_history");
+      const periodsDoc = await getDoc(periodsRef);
+      
+      if (periodsDoc.exists()) {
+        const data = periodsDoc.data();
+        return {
+          years: Array.isArray(data.availableYears) ? data.availableYears : [],
+          terms: Array.isArray(data.availableTerms) ? data.availableTerms : ['1', '2', '3'], 
+        };
+      }
+      return { years: [], terms: ['1', '2', '3'] }; 
+    } catch (error) {
+      console.error("Error fetching available periods:", error);
+      return { years: [], terms: ['1', '2', '3'] };
+    }
+  };
+
   // ฟังก์ชันสำหรับดึงข้อมูลจากทุก collection ที่มี pattern document_submissions_ และ loan_process_status_
   const fetchAllSubmissions = async () => {
     try {
-      // ดึงรายการ collections ทั้งหมด (จำลองการค้นหา pattern)
-      const years = ['2566', '2567', '2568']; // สามารถปรับเป็น dynamic ได้
-      const terms = ['1', '2'];
+      // 1. ดึงรายการปีและเทอมที่เคยมีการเปิดระบบจาก Document ประวัติ
+      const { years, terms } = await fetchAvailablePeriods();
+      
+      // หากไม่พบปีใด ๆ ในประวัติ จะไม่ดำเนินการดึงข้อมูล
+      if (years.length === 0) {
+        console.log("No available periods found in history. Skipping submission fetch.");
+        setAvailableYears([]);
+        setAvailableTerms(terms.sort());
+        return { submissions: [], processStatuses: {} };
+      }
       
       let allSubmissions = [];
       let allProcessStatuses = {};
