@@ -7,7 +7,24 @@ import {
   getDoc, 
   Timestamp 
 } from "firebase/firestore";
-import { useNavigate } from "react-router-dom"; 
+import { useNavigate } from "react-router-dom";
+import { 
+  FaUsers, 
+  FaFileAlt, 
+  FaClock, 
+  FaTimesCircle, 
+  FaCheckCircle, 
+  FaChartLine, 
+  FaMoneyBillWave,
+  FaBell,
+  FaClipboardList,
+  FaCog,
+  FaCalendarAlt,
+  FaBook,
+  FaSearch,
+  FaHistory
+} from "react-icons/fa";
+import { RxRocket } from "react-icons/rx";
 
 export default function EnhancedDashboard() {
   const navigate = useNavigate();
@@ -26,6 +43,7 @@ export default function EnhancedDashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [selectedPeriod, setSelectedPeriod] = useState('month');
   const [systemConfig, setSystemConfig] = useState(null);
+  const [userNames, setUserNames] = useState({});
 
   useEffect(() => {
     fetchDashboardData();
@@ -77,6 +95,27 @@ export default function EnhancedDashboard() {
       console.error("Error fetching available periods:", error);
       return { years: ['2567'], terms: ['1', '2', '3'] };
     }
+  };
+
+  const fetchUserNames = async (userIds) => {
+    const names = {};
+    for (const userId of userIds) {
+      if (!userNames[userId]) {
+        try {
+          const userRef = doc(db, "users", userId);
+          const userDoc = await getDoc(userRef);
+          if (userDoc.exists()) {
+            names[userId] = userDoc.data().name || 'ไม่ระบุชื่อ';
+          } else {
+            names[userId] = 'ไม่พบข้อมูล';
+          }
+        } catch (error) {
+          console.error(`Error fetching user ${userId}:`, error);
+          names[userId] = 'ไม่สามารถดึงข้อมูล';
+        }
+      }
+    }
+    return names;
   };
 
   const calculateStats = async (years, terms, periodFilter) => {
@@ -142,7 +181,7 @@ export default function EnhancedDashboard() {
 
               allActivities.push({
                 id: doc.id,
-                userName: data.name || data.userId || 'ไม่ระบุชื่อ',
+                userId: data.userId || 'ไม่ระบุชื่อ',
                 student_id: data.student_id || 'N/A',
                 academicYear: year,
                 term: term,
@@ -195,6 +234,9 @@ export default function EnhancedDashboard() {
       setSystemConfig(config);
       const { years, terms } = await fetchAvailablePeriods();
       const data = await calculateStats(years, terms, selectedPeriod);
+      const uniqueUserIds = [...new Set(data.recentActivities.map(a => a.userId))];
+      const newUserNames = await fetchUserNames(uniqueUserIds);
+      setUserNames(prev => ({ ...prev, ...newUserNames }));
       
       setStats({
         totalStudents: data.totalStudents,
@@ -231,17 +273,6 @@ export default function EnhancedDashboard() {
     return stats.totalStudents > 0 ? Math.round((stats.totalSubmissions / stats.totalStudents) * 100) : 0;
   };
 
-  const formatTime = (date) => {
-    return date.toLocaleString('th-TH', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    });
-  };
-
   const getPeriodLabel = () => {
     switch(selectedPeriod) {
       case 'today': return 'วันนี้';
@@ -262,13 +293,12 @@ export default function EnhancedDashboard() {
   };
 
   const handleViewSubmissionDetail = (activity) => {
-    // ⭐️ นำทางไปยัง /document-submission พร้อมส่งค่า studentId, year, และ term ผ่าน Query String
     const path = `/document-submission?studentId=${activity.student_id}&year=${activity.academicYear}&term=${activity.term}`;
     navigate(path); 
   };
 
   const handleViewAllActivities = () => {
-    console.log('View all activities');
+    navigate('/document-submission');
   };
 
   const formatDateTime = (isoString) => {
@@ -304,31 +334,6 @@ export default function EnhancedDashboard() {
     innerContainer: {
       maxWidth: "1400px",
       margin: "0 auto",
-    },
-    header: {
-      background: "rgba(255, 255, 255, 0.95)",
-      backdropFilter: "blur(10px)",
-      borderRadius: "20px",
-      padding: "2rem",
-      marginBottom: "2rem",
-      boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      flexWrap: "wrap",
-      gap: "1rem",
-    },
-    headerLeft: {
-      flex: 1,
-    },
-    title: {
-      fontSize: "2.5rem",
-      fontWeight: "700",
-      background: "linear-gradient(135deg, #000000ff 0%, #764ba2 100%)",
-      WebkitBackgroundClip: "text",
-      WebkitTextFillColor: "transparent",
-      margin: 0,
-      marginBottom: "0.5rem",
     },
     systemCard: {
       background: "rgba(255, 255, 255, 0.95)",
@@ -420,6 +425,9 @@ export default function EnhancedDashboard() {
       fontSize: "0.9rem",
       color: "#64748b",
       fontWeight: "600",
+      display: "flex",
+      alignItems: "center",
+      gap: "0.3rem",
     },
     infoValue: {
       fontSize: "1rem",
@@ -450,6 +458,7 @@ export default function EnhancedDashboard() {
     statIcon: {
       fontSize: "3rem",
       marginBottom: "1rem",
+      color: "#667eea",
     },
     statTitle: {
       fontSize: "0.95rem",
@@ -485,6 +494,9 @@ export default function EnhancedDashboard() {
       fontWeight: "700",
       color: "#1e293b",
       marginBottom: "1.5rem",
+      display: "flex",
+      alignItems: "center",
+      gap: "0.5rem",
     },
     progressBarContainer: {
       height: "12px",
@@ -531,6 +543,9 @@ export default function EnhancedDashboard() {
       fontWeight: "700",
       color: "#1e293b",
       margin: 0,
+      display: "flex",
+      alignItems: "center",
+      gap: "0.5rem",
     },
     viewAllButton: {
       background: "none",
@@ -562,6 +577,7 @@ export default function EnhancedDashboard() {
     },
     activityIcon: {
       fontSize: "2.5rem",
+      color: "#667eea",
     },
     activityContent: {
       flex: 1,
@@ -580,6 +596,9 @@ export default function EnhancedDashboard() {
     activityTime: {
       fontSize: "0.85rem",
       color: "#94a3b8",
+      display: "flex",
+      alignItems: "center",
+      gap: "0.3rem",
     },
     activityBadge: (bgColor, color) => ({
       padding: "0.5rem 1rem",
@@ -603,6 +622,9 @@ export default function EnhancedDashboard() {
       marginBottom: "1.5rem",
       paddingBottom: "1rem",
       borderBottom: "2px solid #f1f5f9",
+      display: "flex",
+      alignItems: "center",
+      gap: "0.5rem",
     },
     actionButtons: {
       display: "flex",
@@ -638,9 +660,9 @@ export default function EnhancedDashboard() {
       flexDirection: "column",
       alignItems: "center",
       justifyContent: "center",
-      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
     },
     spinnerContainer: {
+      color: "#464646ff",
       position: "relative",
       width: "80px",
       height: "80px",
@@ -656,6 +678,7 @@ export default function EnhancedDashboard() {
       animation: "spin 1s linear infinite",
     },
     spinnerInner: {
+      background: "#464646ff",
       position: "absolute",
       width: "60px",
       height: "60px",
@@ -669,32 +692,26 @@ export default function EnhancedDashboard() {
     loadingText: {
       fontSize: "1.8rem",
       fontWeight: "700",
-      color: "white",
+      color: "#464646ff",
       marginBottom: "0.5rem",
     },
     loadingSubtext: {
       fontSize: "1.1rem",
-      color: "rgba(255, 255, 255, 0.8)",
+      color: "#464646ff",
     },
-    '@media (max-width: 1024px)': {
-      mainContent: {
-        gridTemplateColumns: "1fr",
-      }
-    },
+  };
 
-    if (loading) {
+  if (loading) {
     return (
       <div style={styles.loadingContainer}>
         <div style={styles.spinnerContainer}>
           <div style={styles.spinner}></div>
-          <div style={styles.spinnerInner}></div>
         </div>
         <p style={styles.loadingText}>กำลังโหลดข้อมูล...</p>
         <p style={styles.loadingSubtext}>กรุณารอสักครู่</p>
       </div>
     );
   }
-  };
 
   return (
     <div style={styles.container}>
@@ -734,12 +751,11 @@ export default function EnhancedDashboard() {
       `}</style>
 
       <div style={styles.innerContainer}>
-        {/* System Status */}
         <div style={styles.systemCard}>
           <div style={styles.systemHeader}>
             <div>
               <h2 style={styles.systemTitle}>
-                ⚙️ สถานะระบบ
+                <FaCog /> สถานะระบบ
               </h2>
               <div style={{ marginTop: "1rem" }}>
                 <span style={styles.statusBadge}>
@@ -750,21 +766,21 @@ export default function EnhancedDashboard() {
             </div>
             <div style={styles.periodSelector}>
               <button 
-                className={selectedPeriod === 'today' ? 'active' : ''}
+                className={selectedPeriod === 'today' ? 'active period-btn' : 'period-btn'}
                 style={selectedPeriod === 'today' ? styles.periodButtonActive : styles.periodButton}
                 onClick={() => setSelectedPeriod('today')}
               >
                 วันนี้
               </button>
               <button 
-                className={selectedPeriod === 'week' ? 'active' : ''}
+                className={selectedPeriod === 'week' ? 'active period-btn' : 'period-btn'}
                 style={selectedPeriod === 'week' ? styles.periodButtonActive : styles.periodButton}
                 onClick={() => setSelectedPeriod('week')}
               >
                 สัปดาห์นี้
               </button>
               <button 
-                className={selectedPeriod === 'month' ? 'active' : ''}
+                className={selectedPeriod === 'month' ? 'active period-btn' : 'period-btn'}
                 style={selectedPeriod === 'month' ? styles.periodButtonActive : styles.periodButton}
                 onClick={() => setSelectedPeriod('month')}
               >
@@ -775,30 +791,29 @@ export default function EnhancedDashboard() {
           {systemConfig && (
             <div style={styles.systemInfo}>
               <div style={styles.infoItem}>
-                <span style={styles.infoLabel}>📅 ปีการศึกษา:</span>
+                <span style={styles.infoLabel}><FaCalendarAlt /> ปีการศึกษา:</span>
                 <span style={styles.infoValue}>{systemConfig.academicYear}</span>
               </div>
               <div style={styles.infoItem}>
-                <span style={styles.infoLabel}>📚 เทอม:</span>
+                <span style={styles.infoLabel}><FaBook /> เทอม:</span>
                 <span style={styles.infoValue}>{systemConfig.term}</span>
               </div>
               <div style={styles.infoItem}>
-                <span style={styles.infoLabel}>⏰ ช่วงเวลา:</span>
+                <span style={styles.infoLabel}><FaClock /> ช่วงเวลา:</span>
                 <span style={styles.infoValue}>{getPeriodLabel()}</span>
               </div>
             </div>
           )}
         </div>
 
-        {/* Stats Grid */}
         <div style={styles.statsGrid}>
           <div 
             className="stat-card"
-            style={styles.statCard("linear-gradient(135deg, #667eea 0%, #764ba2 100%)", "👥")}
+            style={styles.statCard()}
             onClick={() => handleQuickAction('studentinfo')}
           >
             <div style={styles.statCardInner}>
-              <div style={styles.statIcon}>👥</div>
+              <div style={styles.statIcon}><FaUsers /></div>
               <div style={styles.statTitle}>จำนวนนักศึกษาทั้งหมด</div>
               <div style={styles.statValue}>{stats.totalStudents.toLocaleString()}</div>
               <div style={styles.statSubtext}>อัตราการส่งเอกสาร: {getSubmissionRate()}%</div>
@@ -807,11 +822,11 @@ export default function EnhancedDashboard() {
 
           <div 
             className="stat-card"
-            style={styles.statCard("linear-gradient(135deg, #f093fb 0%, #f5576c 100%)", "📄")}
+            style={styles.statCard()}
             onClick={() => handleQuickAction('document-submission')}
           >
             <div style={styles.statCardInner}>
-              <div style={styles.statIcon}>📄</div>
+              <div style={styles.statIcon}><FaFileAlt color="#13cdcaff"/></div>
               <div style={styles.statTitle}>การส่งเอกสารรวม ({getPeriodLabel()})</div>
               <div style={styles.statValue}>{stats.totalSubmissions.toLocaleString()}</div>
               <div style={styles.statSubtext}>ทั้งหมดที่นับได้</div>
@@ -820,11 +835,11 @@ export default function EnhancedDashboard() {
 
           <div 
             className="stat-card"
-            style={styles.statCard("linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)", "⏳")}
+            style={styles.statCard()}
             onClick={() => handleQuickAction('document-submission')}
           >
             <div style={styles.statCardInner}>
-              <div style={styles.statIcon}>⏳</div>
+              <div style={styles.statIcon}><FaClock color="#ffa726"/></div>
               <div style={styles.statTitle}>รอการตรวจสอบ ({getPeriodLabel()})</div>
               <div style={styles.statValue}>{stats.pendingReview.toLocaleString()}</div>
               <div style={styles.statSubtext}>ต้องดำเนินการด่วน</div>
@@ -833,11 +848,11 @@ export default function EnhancedDashboard() {
 
           <div 
             className="stat-card"
-            style={styles.statCard("linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)", "❌")}
+            style={styles.statCard()}
             onClick={() => handleQuickAction('document-submission')}
           >
             <div style={styles.statCardInner}>
-              <div style={styles.statIcon}>❌</div>
+              <div style={styles.statIcon}><FaTimesCircle color="#ef4444"/></div>
               <div style={styles.statTitle}>เอกสารไม่ถูกต้อง ({getPeriodLabel()})</div>
               <div style={styles.statValue}>{stats.rejected.toLocaleString()}</div>
               <div style={styles.statSubtext}>รอการแก้ไข</div>
@@ -846,11 +861,11 @@ export default function EnhancedDashboard() {
 
           <div 
             className="stat-card"
-            style={styles.statCard("linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)", "✅")}
+            style={styles.statCard()}
             onClick={() => handleQuickAction('loan-process')}
           >
             <div style={styles.statCardInner}>
-              <div style={styles.statIcon}>✅</div>
+              <div style={styles.statIcon}><FaCheckCircle color="#10b981"/></div>
               <div style={styles.statTitle}>เอกสารถูกต้อง/อนุมัติ ({getPeriodLabel()})</div>
               <div style={styles.statValue}>{stats.approved.toLocaleString()}</div>
               <div style={styles.statSubtext}>พร้อมเตรียมจัดส่งให้ธนาคาร</div>
@@ -858,10 +873,9 @@ export default function EnhancedDashboard() {
           </div>
         </div>
 
-        {/* Progress Section */}
         <div style={styles.progressSection}>
           <div style={styles.progressCard}>
-            <div style={styles.progressTitle}>📈 อัตราการตรวจสอบเอกสาร</div>
+            <div style={styles.progressTitle}><FaChartLine color="#00ef2cff"/> อัตราการตรวจสอบเอกสาร</div>
             <div style={styles.progressBarContainer}>
               <div style={styles.progressBar(calculateCompletionRate(), "linear-gradient(90deg, #667eea 0%, #764ba2 100%)")}></div>
             </div>
@@ -871,7 +885,7 @@ export default function EnhancedDashboard() {
           </div>
 
           <div style={styles.progressCard}>
-            <div style={styles.progressTitle}>💰 สถานะการดำเนินการกู้ยืม</div>
+            <div style={styles.progressTitle}><FaMoneyBillWave /> สถานะการดำเนินการกู้ยืม</div>
             <div style={styles.progressBarContainer}>
               <div style={styles.progressBar(getProcessingRate(), "linear-gradient(90deg, #f093fb 0%, #f5576c 100%)")}></div>
             </div>
@@ -881,12 +895,10 @@ export default function EnhancedDashboard() {
           </div>
         </div>
 
-        {/* Main Content */}
         <div className="main-content" style={styles.mainContent}>
-          {/* Recent Activities */}
           <div style={styles.activitiesCard}>
             <div style={styles.activitiesHeader}>
-              <h3 style={styles.activitiesTitle}>🔔 กิจกรรมล่าสุด ({getPeriodLabel()})</h3>
+              <h3 style={styles.activitiesTitle}><FaBell color="#ffd500ff"/> กิจกรรมล่าสุด ({getPeriodLabel()})</h3>
               <button 
                 className="view-all"
                 style={styles.viewAllButton} 
@@ -906,16 +918,16 @@ export default function EnhancedDashboard() {
                       style={styles.activityItem}
                       onClick={() => handleViewSubmissionDetail(activity)}
                     >
-                      <div style={styles.activityIcon}>📋</div>
+                      <div style={styles.activityIcon}><FaClipboardList /></div>
                       <div style={styles.activityContent}>
                         <div style={styles.activityName}>
-                          {activity.userName} ({activity.student_id})
+                          {activity.student_id} {userNames[activity.userId] || 'กำลังโหลด...'}
                         </div>
                         <div style={styles.activityDetail}>
                           ส่งเอกสาร กยศ. ปี {activity.academicYear} เทอม {activity.term}
                         </div>
                         <div style={styles.activityTime}>
-                          ⏰ {formatDateTime(activity.submittedAt)}
+                          <FaClock /> {formatDateTime(activity.submittedAt)}
                         </div>
                       </div>
                       <div style={styles.activityBadge(statusInfo.bgColor, statusInfo.color)}>
@@ -926,23 +938,22 @@ export default function EnhancedDashboard() {
                 })
               ) : (
                 <div style={{ textAlign: "center", padding: "3rem", color: "#94a3b8" }}>
-                  <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📭</div>
+                  <div style={{ fontSize: "3rem", marginBottom: "1rem" }}><FaSearch /></div>
                   <div style={{ fontSize: "1.1rem", fontWeight: "600" }}>ไม่มีกิจกรรมในช่วงเวลานี้</div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Quick Actions */}
           <div style={styles.quickActionsCard}>
-            <h3 style={styles.quickActionsTitle}>⚡ ดำเนินการด่วน</h3>
+            <h3 style={styles.quickActionsTitle}><RxRocket color="#ff0000ff"/> ดำเนินการด่วน</h3>
             <div style={styles.actionButtons}>
               <button 
                 className="action-btn"
                 style={styles.actionButton("linear-gradient(135deg, #667eea 0%, #764ba2 100%)")}
                 onClick={() => handleQuickAction('document-submission')}
               >
-                <span>🔍 ตรวจสอบเอกสาร</span>
+                <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><FaFileAlt /> ตรวจสอบเอกสาร</span>
                 <span style={styles.actionCount}>{stats.pendingReview.toLocaleString()}</span>
               </button>
 
@@ -951,7 +962,7 @@ export default function EnhancedDashboard() {
                 style={styles.actionButton("linear-gradient(135deg, #f093fb 0%, #f5576c 100%)")}
                 onClick={() => handleQuickAction('loan-process')}
               >
-                <span>💰 จัดการสถานะการดำเนินการ</span>
+                <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><FaMoneyBillWave /> จัดการสถานะการดำเนินการ</span>
                 <span style={styles.actionCount}>{stats.inProcess.toLocaleString()}</span>
               </button>
 
@@ -960,10 +971,9 @@ export default function EnhancedDashboard() {
                 style={styles.actionButton("linear-gradient(135deg, #ffee80ff 0%, #ffd815ff 100%)")}
                 onClick={() => handleQuickAction('studentinfo')}
               >
-                <span>👥 ดูข้อมูลนักศึกษา</span>
+                <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><FaUsers /> ดูข้อมูลนักศึกษา</span>
                 <span style={styles.actionCount}>{stats.totalStudents.toLocaleString()}</span>
               </button>
-
             </div>
           </div>
         </div>
