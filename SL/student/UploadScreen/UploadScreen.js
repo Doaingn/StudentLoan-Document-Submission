@@ -105,6 +105,14 @@ const UploadScreen = ({ navigation, route }) => {
     setUserAge
   );
 
+  useEffect(() => {
+    return () => {
+      // Cleanup เมื่อ component unmount
+      setIsConvertingToPDF({});
+      setIsValidatingAI({});
+    };
+  }, []);
+
   // File management hook
   const {
     isConvertingToPDF: localIsConvertingToPDF,
@@ -115,11 +123,20 @@ const UploadScreen = ({ navigation, route }) => {
 
   // Merge local isConvertingToPDF with hook's isConvertingToPDF
   useEffect(() => {
-    if (Object.keys(localIsConvertingToPDF).length > 0) {
-      setIsConvertingToPDF(localIsConvertingToPDF);
-    }
-  }, [localIsConvertingToPDF]);
+    setIsConvertingToPDF((prev) => {
+      // merge state
+      const merged = { ...prev, ...localIsConvertingToPDF };
 
+      // ถ้า local ลบ key ออกไปแล้ว ให้ global ลบตามด้วย
+      Object.keys(merged).forEach((key) => {
+        if (!(key in localIsConvertingToPDF)) {
+          delete merged[key];
+        }
+      });
+
+      return merged;
+    });
+  }, [localIsConvertingToPDF]);
   // Calculate volunteer hours when uploads change
   useEffect(() => {
     if (uploads.volunteer_doc) {
@@ -300,7 +317,8 @@ const UploadScreen = ({ navigation, route }) => {
       volunteerHours,
       appConfig,
       setLocalIsConvertingToPDF,
-      setStorageUploadProgress
+      setStorageUploadProgress,
+      setIsValidatingAI
     );
   };
 
