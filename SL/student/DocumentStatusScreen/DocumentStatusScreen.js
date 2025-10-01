@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Print from "expo-print";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { db, auth, storage } from "../../database/firebase";
 import { doc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import {
@@ -346,10 +346,9 @@ const DocumentStatusScreen = ({ route, navigation }) => {
 
       const pdfInfo = await FileSystem.getInfoAsync(pdfUri);
       const originalName = imageFile.filename || imageFile.name || "image";
-      const nameWithoutExtension = originalName.replace(/\.[^/.]+$/, "");
 
       const pdfFile = {
-        filename: `${nameWithoutExtension}_converted.pdf`,
+        filename: `${docId}.pdf`,
         uri: pdfUri,
         mimeType: "application/pdf",
         size: pdfInfo.size,
