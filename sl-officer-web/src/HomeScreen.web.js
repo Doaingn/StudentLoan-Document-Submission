@@ -298,7 +298,6 @@ export default function EnhancedDashboard() {
   const styles = {
     container: {
       minHeight: "100vh",
-      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
       padding: "2rem",
       fontFamily: "'Kanit', sans-serif",
     },
@@ -325,33 +324,11 @@ export default function EnhancedDashboard() {
     title: {
       fontSize: "2.5rem",
       fontWeight: "700",
-      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+      background: "linear-gradient(135deg, #000000ff 0%, #764ba2 100%)",
       WebkitBackgroundClip: "text",
       WebkitTextFillColor: "transparent",
       margin: 0,
       marginBottom: "0.5rem",
-    },
-    subtitle: {
-      color: "#64748b",
-      fontSize: "1.1rem",
-      margin: 0,
-    },
-    clockCard: {
-      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-      color: "white",
-      padding: "1.5rem 2rem",
-      borderRadius: "15px",
-      textAlign: "center",
-      boxShadow: "0 10px 30px rgba(102, 126, 234, 0.3)",
-    },
-    clockTime: {
-      fontSize: "1.8rem",
-      fontWeight: "700",
-      marginBottom: "0.3rem",
-    },
-    clockDate: {
-      fontSize: "0.9rem",
-      opacity: 0.9,
     },
     systemCard: {
       background: "rgba(255, 255, 255, 0.95)",
@@ -757,23 +734,6 @@ export default function EnhancedDashboard() {
       `}</style>
 
       <div style={styles.innerContainer}>
-        {/* Header */}
-        <div style={styles.header}>
-          <div style={styles.headerLeft}>
-            <h1 style={styles.title}>แดชบอร์ดระบบเอกสาร กยศ.</h1>
-            <p style={styles.subtitle}>ภาพรวมระบบและสถิติการใช้งาน</p>
-          </div>
-          <div style={styles.clockCard}>
-            <div style={styles.clockTime}>{currentTime.toLocaleTimeString('th-TH')}</div>
-            <div style={styles.clockDate}>{currentTime.toLocaleDateString('th-TH', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
-            })}</div>
-          </div>
-        </div>
-
         {/* System Status */}
         <div style={styles.systemCard}>
           <div style={styles.systemHeader}>
@@ -826,10 +786,6 @@ export default function EnhancedDashboard() {
                 <span style={styles.infoLabel}>⏰ ช่วงเวลา:</span>
                 <span style={styles.infoValue}>{getPeriodLabel()}</span>
               </div>
-              {/* <div style={styles.infoItem}>
-                <span style={styles.infoLabel}>🚀 เข้าถึงทันที:</span>
-                <span style={styles.infoValue}>{systemConfig.immediateAccess ? 'ใช่' : 'ไม่'}</span>
-              </div> */}
             </div>
           )}
         </div>
@@ -1001,7 +957,7 @@ export default function EnhancedDashboard() {
 
               <button 
                 className="action-btn"
-                style={styles.actionButton("linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)")}
+                style={styles.actionButton("linear-gradient(135deg, #ffee80ff 0%, #ffd815ff 100%)")}
                 onClick={() => handleQuickAction('studentinfo')}
               >
                 <span>👥 ดูข้อมูลนักศึกษา</span>
