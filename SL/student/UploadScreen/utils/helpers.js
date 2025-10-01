@@ -17,7 +17,7 @@ export const calculateAge = (birthDate) => {
   // ถ้าเป็น Date object อยู่แล้ว
   else if (birthDate instanceof Date) {
     birthDateObj = birthDate;
-  } else {
+  } else {r
     console.warn("Unsupported birthDate type:", typeof birthDate);
     return null;
   }

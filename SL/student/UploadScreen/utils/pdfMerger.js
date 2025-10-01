@@ -1,18 +1,27 @@
-import * as FileSystem from "expo-file-system/legacy"; // Changed to legacy import
+import * as FileSystem from "expo-file-system/legacy";
 import * as Print from "expo-print";
 
 // ฟังก์ชันสำหรับรวมรูปภาพหลายไฟล์ให้เป็น PDF ไฟล์เดียว
-export const mergeImagesToPdf = async (imageFiles, docId) => {
+export const mergeImagesToPdf = async (
+  imageFiles,
+  docId,
+  setIsConvertingToPDF
+) => {
   if (!Array.isArray(imageFiles) || imageFiles.length === 0) {
     throw new Error("ไม่มีไฟล์รูปภาพให้รวม");
   }
 
   try {
-    // อ่านไฟล์รูปภาพเป็น base64 ในขั้นตอนเดียว
+    // mark ว่ากำลังประมวลผล
+    setIsConvertingToPDF((prev) => ({
+      ...prev,
+      [`${docId}_merge`]: true,
+    }));
+
+    // อ่านไฟล์รูปภาพเป็น base64
     const filesWithBase64 = await Promise.all(
       imageFiles.map(async (file) => {
         try {
-          // Use legacy API with proper encoding type
           const base64Content = await FileSystem.readAsStringAsync(file.uri, {
             encoding: FileSystem.EncodingType.Base64,
           });
@@ -77,11 +86,8 @@ export const mergeImagesToPdf = async (imageFiles, docId) => {
 
     const pdfInfo = await FileSystem.getInfoAsync(pdfUri);
 
-    // ตั้งชื่อไฟล์สำหรับ PDF ที่รวมแล้ว
-    const mergedFileName = `${docId}.pdf`;
-
     const mergedPdfFile = {
-      filename: mergedFileName,
+      filename: `${docId}.pdf`,
       uri: pdfUri,
       mimeType: "application/pdf",
       size: pdfInfo.size,
@@ -98,5 +104,12 @@ export const mergeImagesToPdf = async (imageFiles, docId) => {
   } catch (error) {
     console.error("Error in mergeImagesToPdf:", error);
     throw new Error(`ไม่สามารถรวมรูปภาพเป็น PDF ได้: ${error.message}`);
+  } finally {
+    // ✅ clear state เสมอ
+    setIsConvertingToPDF((prev) => {
+      const newState = { ...prev };
+      delete newState[`${docId}_merge`];
+      return newState;
+    });
   }
 };
