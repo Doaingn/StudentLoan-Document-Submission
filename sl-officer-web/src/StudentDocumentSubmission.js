@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom"; 
 import { db } from "./database/firebase";
 import { collection, getDocs, doc, updateDoc, getDoc } from "firebase/firestore";
+
 
 const StudentDocumentSubmission = () => {
   const [submissions, setSubmissions] = useState([]);
@@ -16,6 +18,11 @@ const StudentDocumentSubmission = () => {
   const [termFilter, setTermFilter] = useState("all");
   const [availableYears, setAvailableYears] = useState([]);
   const [availableTerms, setAvailableTerms] = useState([]);
+
+  const [searchParams] = useSearchParams();
+  const studentIdParam = searchParams.get('studentId');
+  const yearParam = searchParams.get('year');
+  const termParam = searchParams.get('term');
   
   // Document type mappings in Thai
   const documentTypes = {
@@ -61,6 +68,42 @@ const StudentDocumentSubmission = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+
+    // ⭐️ [NEW EFFECT] 1. ตั้งค่า filter ตาม URL ที่ส่งมาจาก Dashboard ⭐️
+  useEffect(() => {
+    // ตั้งค่า yearFilter และ termFilter ให้ตรงกับ URL
+    if (yearParam && yearFilter !== yearParam) {
+      setYearFilter(yearParam);
+    }
+    if (termParam && termFilter !== termParam) {
+      setTermFilter(termParam);
+    }
+    // setSearchTerm(studentIdParam || ""); // สามารถตั้งค่า searchTerm ได้เลย
+  }, [studentIdParam, yearParam, termParam]);
+
+
+  // ⭐️ [NEW EFFECT] 2. เลือกรายการเอกสารโดยอัตโนมัติ เมื่อข้อมูลโหลดเสร็จ ⭐️
+  useEffect(() => {
+    // Logic นี้จะทำงานเมื่อ submissions ถูกโหลดเข้ามาแล้ว (จากการเปลี่ยน yearFilter/termFilter)
+    if (studentIdParam && submissions.length > 0) {
+      const initialSelection = submissions.find(sub => 
+        // ค้นหาจาก student_id
+        sub.student_id === studentIdParam 
+      );
+
+      if (initialSelection) {
+        setSelectedSubmission(initialSelection);
+        setSearchTerm(initialSelection.student_id); // ตั้งค่า searchTerm เพื่อให้ตารางกรองเหลือรายการเดียว
+        
+        // ล้างพารามิเตอร์ใน URL หลังจากการเลือกสำเร็จ (เพื่อไม่ให้เปิดซ้ำเมื่อ Refresh)
+        if (typeof window !== 'undefined' && window.history) {
+          window.history.replaceState(null, '', window.location.pathname); 
+        }
+      }
+    }
+    
+  }, [submissions, studentIdParam]); // ขึ้นอยู่กับข้อมูล submissions และ studentIdParam
 
   const fetchAppConfig = async () => {
       try {
@@ -149,8 +192,6 @@ const fetchAllSubmissions = async () => {
                         fetchedTerms.add(term);
                     }
                 } catch (error) {
-                    // Collection ไม่มี - ข้ามไป (เงียบ ๆ)
-                    // console.log(`Collection document_submissions_${year}_${term} not found/error: ${error.message}`);
                 }
             }
         }
