@@ -23,6 +23,28 @@ const DocumentsSection = ({
   term = "1", // เพิ่ม term prop
   volunteerHours = 0,
 }) => {
+  const isProcessing = () => {
+    return (
+      (isValidatingAI && Object.keys(isValidatingAI).length > 0) ||
+      (isConvertingToPDF && Object.keys(isConvertingToPDF).length > 0)
+    );
+  };
+  console.log("isValidatingAI keys:", Object.keys(isValidatingAI));
+  console.log("isConvertingToPDF keys:", Object.keys(isConvertingToPDF));
+  const getProcessingStatus = (docId) => {
+    const currentlyProcessing = isDocumentProcessing(docId);
+    const otherProcessing = isProcessing() && !currentlyProcessing;
+    return { currentlyProcessing, otherProcessing };
+  };
+
+  // ตรวจสอบว่า document นี้กำลัง process อยู่หรือไม่
+  const isDocumentProcessing = (docId) => {
+    return (
+      isValidatingAI[docId] ||
+      isConvertingToPDF[docId] ||
+      isConvertingToPDF[`${docId}_merge`]
+    );
+  };
   // เอกสารที่มี AI validation แตกต่างกันตาม term
   const getAIEnabledDocuments = () => {
     switch (term) {
@@ -74,6 +96,9 @@ const DocumentsSection = ({
 
   const renderDocumentActions = (doc) => {
     const docFiles = uploads[doc.id] || [];
+    const { currentlyProcessing, otherProcessing } = getProcessingStatus(
+      doc.id
+    );
 
     // Show validation spinner for AI checking
     if (isValidatingAI[doc.id]) {
@@ -81,7 +106,7 @@ const DocumentsSection = ({
         <View style={styles.actionButtons}>
           <View style={styles.validatingButton}>
             <ActivityIndicator size="small" color="#8b5cf6" />
-            <Text style={styles.validatingText}>กำลังตรวจสอบด้วย AI...</Text>
+            <Text style={styles.validatingText}>กำลังตรวจสอบ</Text>
           </View>
         </View>
       );
@@ -99,12 +124,25 @@ const DocumentsSection = ({
       );
     }
 
+    // ถ้า document อื่นกำลัง process อยู่ แสดงข้อความ disabled
+    if (otherProcessing) {
+      return (
+        <View style={styles.actionButtons}>
+          <View style={styles.disabledButton}>
+            <Ionicons name="lock-closed-outline" size={16} color="#9ca3af" />
+            <Text style={styles.disabledText}>รอการประมวลผลเสร็จสิ้น...</Text>
+          </View>
+        </View>
+      );
+    }
+
     if (docFiles.length > 0) {
       return (
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={styles.addMoreButton}
             onPress={() => onFileUpload(doc.id, true)}
+            disabled={otherProcessing}
           >
             <Ionicons name="add-circle-outline" size={16} color="#2563eb" />
             <Text style={styles.buttonText}>เพิ่มไฟล์</Text>
@@ -112,6 +150,7 @@ const DocumentsSection = ({
           <TouchableOpacity
             style={styles.removeAllButton}
             onPress={() => onRemoveFile(doc.id)}
+            disabled={otherProcessing}
           >
             <Ionicons name="trash-outline" size={16} color="#ef4444" />
             <Text style={styles.buttonText}>ลบทั้งหมด</Text>
@@ -124,15 +163,16 @@ const DocumentsSection = ({
           <TouchableOpacity
             style={styles.uploadButton}
             onPress={() => onFileUpload(doc.id, true)}
+            disabled={otherProcessing}
           >
             <Ionicons name="cloud-upload-outline" size={16} color="#2563eb" />
             <Text style={styles.uploadButtonText}>อัปโหลด</Text>
           </TouchableOpacity>
-          {/* Download button for generated forms - เฉพาะเทอม 1 */}
           {GENERATABLE_DOCUMENTS.includes(doc.id) && (
             <TouchableOpacity
               style={styles.downloadButton}
               onPress={() => onDownloadDocument(doc.id)}
+              disabled={otherProcessing}
             >
               <Ionicons name="download-outline" size={16} color="#10b981" />
               <Text style={styles.buttonText}>ดาวน์โหลด</Text>
@@ -140,6 +180,57 @@ const DocumentsSection = ({
           )}
         </View>
       );
+    }
+  };
+
+  const getDocumentCardStyle = (doc) => {
+    const baseStyle = [styles.documentCard];
+    const docFiles = uploads[doc.id] || [];
+
+    // ประกาศตัวแปรภายในฟังก์ชันนี้
+    const currentlyProcessing = isDocumentProcessing(doc.id);
+    const otherProcessing = isProcessing() && !currentlyProcessing;
+
+    if (otherProcessing) {
+      baseStyle.push(styles.disabledCard);
+      return baseStyle;
+    }
+
+    if (currentlyProcessing) {
+      baseStyle.push(styles.processingCard);
+      return baseStyle;
+    }
+
+    if (docFiles.length > 0) {
+      baseStyle.push({ borderLeftColor: "#10b981" });
+    } else if (doc.required) {
+      baseStyle.push({ borderLeftColor: "#ef4444" });
+    } else {
+      baseStyle.push({ borderLeftColor: "#e2e8f0" });
+    }
+
+    return baseStyle;
+  };
+
+  const getFileIcon = (mimeType, filename) => {
+    const type = mimeType?.toLowerCase() || "";
+    const name = filename?.toLowerCase() || "";
+
+    if (
+      type.startsWith("image/") ||
+      name.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/)
+    ) {
+      return "image";
+    } else if (type.includes("pdf") || name.endsWith(".pdf")) {
+      return "document-text";
+    } else if (type.includes("word") || name.match(/\.(doc|docx)$/)) {
+      return "document";
+    } else if (type.includes("excel") || name.match(/\.(xls|xlsx)$/)) {
+      return "grid";
+    } else if (type.includes("text") || name.match(/\.(txt|json)$/)) {
+      return "document-text-outline";
+    } else {
+      return "document-outline";
     }
   };
 
@@ -302,43 +393,6 @@ const DocumentsSection = ({
     );
   };
 
-  const getDocumentCardStyle = (doc) => {
-    const baseStyle = [styles.documentCard];
-    const docFiles = uploads[doc.id] || [];
-
-    if (docFiles.length > 0) {
-      baseStyle.push({ borderLeftColor: "#10b981" }); // Green for uploaded
-    } else if (doc.required) {
-      baseStyle.push({ borderLeftColor: "#ef4444" }); // Red for required
-    } else {
-      baseStyle.push({ borderLeftColor: "#e2e8f0" }); // Default gray
-    }
-
-    return baseStyle;
-  };
-
-  const getFileIcon = (mimeType, filename) => {
-    const type = mimeType?.toLowerCase() || "";
-    const name = filename?.toLowerCase() || "";
-
-    if (
-      type.startsWith("image/") ||
-      name.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/)
-    ) {
-      return "image";
-    } else if (type.includes("pdf") || name.endsWith(".pdf")) {
-      return "document-text";
-    } else if (type.includes("word") || name.match(/\.(doc|docx)$/)) {
-      return "document";
-    } else if (type.includes("excel") || name.match(/\.(xls|xlsx)$/)) {
-      return "grid";
-    } else if (type.includes("text") || name.match(/\.(txt|json)$/)) {
-      return "document-text-outline";
-    } else {
-      return "document-outline";
-    }
-  };
-
   const getAIBadgeForDocument = (docId) => {
     if (AI_ENABLED_DOCUMENTS.includes(docId)) {
       // Different AI badge styles for different document types
@@ -473,65 +527,98 @@ const DocumentsSection = ({
             </Text>
           </View>
         )}
+        {isProcessing() && (
+          <View style={styles.processingWarning}>
+            <ActivityIndicator size="small" color="#8b5cf6" />
+            <Text style={styles.processingWarningText}>
+              กำลังประมวลผลเอกสาร กรุณารอสักครู่...
+            </Text>
+          </View>
+        )}
       </View>
 
-      {documents.map((doc, index) => (
-        <View key={doc.id} style={getDocumentCardStyle(doc)}>
-          <View style={styles.documentContent}>
-            <View style={styles.documentInfo}>
-              <View style={styles.documentIcon}>
-                <Ionicons
-                  name={
-                    uploads[doc.id]?.length > 0
-                      ? "checkmark-circle"
-                      : doc.required
-                      ? "document-text-outline"
-                      : "document-outline"
-                  }
-                  size={24}
-                  color={
-                    uploads[doc.id]?.length > 0
-                      ? "#10b981"
-                      : doc.required
-                      ? "#2563eb"
-                      : "#9ca3af"
-                  }
-                />
-              </View>
-              <View style={styles.documentDetails}>
-                <View style={styles.documentTitleContainer}>
-                  <Text style={styles.documentTitle} numberOfLines={2}>
-                    {doc.title}
-                    {doc.required && (
-                      <Text style={styles.requiredMark}> *</Text>
-                    )}
-                  </Text>
-                  {getAIBadgeForDocument(doc.id)}
+      {documents.map((doc, index) => {
+        const { currentlyProcessing, otherProcessing } = getProcessingStatus(
+          doc.id
+        );
+
+        return (
+          <View
+            key={doc.id}
+            style={getDocumentCardStyle(doc)}
+            pointerEvents={otherProcessing ? "none" : "auto"}
+          >
+            <View
+              style={[
+                styles.documentContent,
+                otherProcessing && styles.disabledContent,
+              ]}
+            >
+              <View style={styles.documentInfo}>
+                <View style={styles.documentIcon}>
+                  <Ionicons
+                    name={
+                      uploads[doc.id]?.length > 0
+                        ? "checkmark-circle"
+                        : doc.required
+                        ? "document-text-outline"
+                        : "document-outline"
+                    }
+                    size={24}
+                    color={
+                      otherProcessing
+                        ? "#d1d5db"
+                        : uploads[doc.id]?.length > 0
+                        ? "#10b981"
+                        : doc.required
+                        ? "#2563eb"
+                        : "#9ca3af"
+                    }
+                  />
                 </View>
+                <View style={styles.documentDetails}>
+                  <View style={styles.documentTitleContainer}>
+                    <Text
+                      style={[
+                        styles.documentTitle,
+                        otherProcessing && styles.disabledText,
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {doc.title}
+                      {doc.required && (
+                        <Text style={styles.requiredMark}> *</Text>
+                      )}
+                    </Text>
+                    {getAIBadgeForDocument(doc.id)}
+                  </View>
 
-                {doc.description && (
-                  <Text style={styles.documentDescription} numberOfLines={2}>
-                    {doc.description}
-                  </Text>
-                )}
+                  {doc.description && (
+                    <Text
+                      style={[
+                        styles.documentDescription,
+                        otherProcessing && styles.disabledText,
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {doc.description}
+                    </Text>
+                  )}
 
-                {renderDocumentStatusBadge(doc)}
-
-                {/* AI backend unavailable warning */}
-                {renderAIUnavailableWarning(doc)}
+                  {renderDocumentStatusBadge(doc)}
+                  {renderAIUnavailableWarning(doc)}
+                </View>
               </View>
             </View>
-          </View>
 
-          {/* Files list */}
-          {renderFilesList(doc)}
+            {renderFilesList(doc)}
 
-          {/* Action buttons */}
-          <View style={styles.documentActions}>
-            {renderDocumentActions(doc)}
+            <View style={styles.documentActions}>
+              {renderDocumentActions(doc)}
+            </View>
           </View>
-        </View>
-      ))}
+        );
+      })}
     </View>
   );
 };
@@ -954,6 +1041,52 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "bold",
     color: "white",
+  },
+  disabledCard: {
+    backgroundColor: "#f9fafb",
+    opacity: 0.6,
+  },
+  processingCard: {
+    borderLeftColor: "#8b5cf6",
+    borderLeftWidth: 4,
+    backgroundColor: "#faf5ff",
+  },
+  disabledContent: {
+    opacity: 0.5,
+  },
+  disabledButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f3f4f6",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    minWidth: 100,
+    justifyContent: "center",
+  },
+  disabledText: {
+    color: "#9ca3af",
+    fontSize: 12,
+    fontWeight: "600",
+    marginLeft: 4,
+  },
+  processingWarning: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#faf5ff",
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#8b5cf6",
+    marginTop: 8,
+  },
+  processingWarningText: {
+    fontSize: 12,
+    color: "#7c3aed",
+    marginLeft: 8,
+    fontWeight: "500",
   },
 });
 
