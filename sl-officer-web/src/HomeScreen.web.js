@@ -4,13 +4,13 @@ import {
   collection, 
   getDocs, 
   doc, 
-  getDoc,
-  query,
-  where 
+  getDoc, 
+  Timestamp 
 } from "firebase/firestore";
+import { useNavigate } from "react-router-dom"; 
 
-export default function HomeScreen() {
-  const [loading, setLoading] = useState(true);
+export default function EnhancedDashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     totalStudents: 0,
     totalSubmissions: 0,
@@ -19,223 +19,207 @@ export default function HomeScreen() {
     rejected: 0,
     inProcess: 0,
     processCompleted: 0,
-    systemStatus: 'ปิดใช้งาน'
+    systemStatus: 'ปิดใช้งาน',
+    recentActivities: []
   });
-  const [recentActivities, setRecentActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [selectedPeriod, setSelectedPeriod] = useState('month');
   const [systemConfig, setSystemConfig] = useState(null);
 
   useEffect(() => {
     fetchDashboardData();
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(interval);
   }, []);
 
-const fetchAvailablePeriods = async () => {
-  try {
-    const periodsRef = doc(db, "DocumentService", "submission_periods_history");
-    const periodsDoc = await getDoc(periodsRef);
-    if (periodsDoc.exists()) {
-      const data = periodsDoc.data();
-      return {
-        years: Array.isArray(data.availableYears) ? data.availableYears : [],
-        terms: Array.isArray(data.availableTerms) ? data.availableTerms : ['1', '2', '3'],
-      };
+  useEffect(() => {
+    if (!loading) {
+      fetchDashboardData();
     }
-    return { years: [], terms: ['1', '2', '3'] }; 
-  } catch (error) {
-    console.error("Error fetching available periods for dashboard:", error);
-    return { years: [], terms: ['1', '2', '3'] };
-  }
-};
+  }, [selectedPeriod]);
 
-
-// ใน HomeScreen.web.js (แทนที่ fetchDashboardData เดิม)
-
-const fetchDashboardData = async () => {
+  const fetchAppConfig = async () => {
     try {
-        setLoading(true);
+      const configRef = doc(db, "DocumentService", "config");
+      const configDoc = await getDoc(configRef);
+      if (configDoc.exists()) {
+        return configDoc.data();
+      } else {
+        return {
+          academicYear: "2567",
+          term: "1",
+          isEnabled: false,
+          immediateAccess: false,
+        };
+      }
+    } catch (error) {
+      console.error("Error fetching app config:", error);
+      return null;
+    }
+  };
 
-        // ... Fetch config และ Fetch all students (โค้ดเดิม) ...
-        const configRef = doc(db, "DocumentService", "config");
-        const configDoc = await getDoc(configRef);
-        let config = null;
-        if (configDoc.exists()) {
-            config = configDoc.data();
-            setSystemConfig(config);
+  const fetchAvailablePeriods = async () => {
+    try {
+      const periodsRef = doc(db, "DocumentService", "submission_periods_history");
+      const periodsDoc = await getDoc(periodsRef);
+      if (periodsDoc.exists()) {
+        const data = periodsDoc.data();
+        return {
+          years: Array.isArray(data.availableYears) ? data.availableYears : ['2567'],
+          terms: Array.isArray(data.availableTerms) ? data.availableTerms : ['1', '2', '3'], 
+        };
+      }
+      return { years: ['2567'], terms: ['1', '2', '3'] }; 
+    } catch (error) {
+      console.error("Error fetching available periods:", error);
+      return { years: ['2567'], terms: ['1', '2', '3'] };
+    }
+  };
+
+  const calculateStats = async (years, terms, periodFilter) => {
+    const periodMap = {
+      today: 1,
+      week: 7,
+      month: 30
+    };
+    const daysBack = periodMap[periodFilter] || periodMap.month;
+    const cutOffDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
+
+    const usersSnap = await getDocs(collection(db, "users"));
+    const totalStudents = usersSnap.size;
+
+    let totalSubmissions = 0;
+    let pendingReview = 0;
+    let approved = 0;
+    let rejected = 0;
+    let inProcess = 0;
+    let processCompleted = 0;
+    let allActivities = [];
+
+    for (const year of years) {
+      for (const term of terms) {
+        try {
+          const submissionsRef = collection(db, `document_submissions_${year}_${term}`);
+          const submissionsSnap = await getDocs(submissionsRef);
+          
+          submissionsSnap.forEach((doc) => {
+            const data = doc.data();
+            const documentStatuses = data.documentStatuses || {};
+            
+            if (Object.keys(documentStatuses).length > 0) {
+              let submittedAt = data.submittedAt;
+              if (submittedAt && submittedAt instanceof Timestamp) {
+                  submittedAt = submittedAt.toDate();
+              } else if (typeof submittedAt === 'string') {
+                  submittedAt = new Date(submittedAt);
+              } else {
+                  submittedAt = new Date(0);
+              }
+
+              if (submittedAt < cutOffDate) {
+                  return; 
+              }
+
+              totalSubmissions++;
+              
+              const statuses = Object.values(documentStatuses).map(d => d.status);
+              const hasRejected = statuses.includes('rejected');
+              const hasPending = statuses.includes('pending');
+              const allApproved = statuses.length > 0 && statuses.every(s => s === 'approved');
+
+              if (hasRejected) {
+                rejected++;
+              } else if (allApproved) {
+                approved++;
+              } else if (hasPending) {
+                pendingReview++;
+              } else {
+                pendingReview++;
+              }
+
+              allActivities.push({
+                id: doc.id,
+                userName: data.name || data.userId || 'ไม่ระบุชื่อ',
+                student_id: data.student_id || 'N/A',
+                academicYear: year,
+                term: term,
+                submittedAt: submittedAt,
+                documentStatuses: documentStatuses
+              });
+            }
+          });
+        } catch (error) {
+          console.log(`Collection document_submissions_${year}_${term} not found (Skipping)`);
         }
 
-        const usersSnap = await getDocs(collection(db, "users"));
-        const totalStudents = usersSnap.size;
+        try {
+          const processRef = collection(db, `loan_process_status_${year}_${term}`);
+          const processSnap = await getDocs(processRef);
 
-        const { years, terms } = await fetchAvailablePeriods();
-        
-        // เรียงลำดับเพื่อให้การตัดสินใจสถานะอิงจากปี/เทอมที่ใหม่ที่สุดก่อน
-        // ปีล่าสุด (2568) ก่อน ปีเก่า (2567)
-        const sortedYears = years.sort((a, b) => parseInt(b) - parseInt(a)); 
-        // เทอมล่าสุด (3) ก่อน เทอมเก่า (1)
-        const sortedTerms = terms.sort((a, b) => parseInt(b) - parseInt(a)); 
-
-        const totalSubmissionUsers = new Set();
-        // Map สำหรับเก็บสถานะสุดท้ายของผู้ใช้: Key = userId, Value = สถานะ ('approved', 'rejected', 'pending')
-        const userFinalStatusMap = new Map(); 
-        const userLoanProcessStatusMap = new Map();
-        const approvedUserIdsInThisTerm = []; // เก็บ userId ที่ Approved ในเทอมนี้
-
-        const fetchPromises = [];
-
-        for (const year of sortedYears) {
-            for (const term of sortedTerms) {
-                fetchPromises.push((async () => {
-                    try {
-                        const submissionsRef = collection(db, `document_submissions_${year}_${term}`);
-                        const submissionsSnap = await getDocs(submissionsRef);
-                        
-                        submissionsSnap.forEach((doc) => {
-                            const userId = doc.id;
-                            const documentStatuses = doc.data().documentStatuses || {};
-                            
-                            if (Object.keys(documentStatuses).length > 0) {
-                                totalSubmissionUsers.add(userId);
-                            }
-
-                            // ตรวจสอบสถานะของ Submission ในปี/เทอมนี้
-                            const hasPending = Object.values(documentStatuses).some(d => d.status === 'pending');
-                            const hasRejected = Object.values(documentStatuses).some(d => d.status === 'rejected');
-                            const allApproved = Object.values(documentStatuses).length > 0 && 
-                                                Object.values(documentStatuses).every(d => d.status === 'approved');
-
-                            let currentStatus = 'none';
-                            if (allApproved) {
-                                currentStatus = 'approved';
-                            } else if (hasRejected) {
-                                currentStatus = 'rejected';
-                            } else if (hasPending) {
-                                currentStatus = 'pending';
-                            }                  
-                             // Logic สำหรับการตัดสินใจสถานะเอกสารสุดท้าย (อิงตามลำดับความสำคัญ)
-                            if (currentStatus !== 'none') {
-                                const existingStatus = userFinalStatusMap.get(userId);
-                                
-                                if (existingStatus === 'rejected' && currentStatus === 'approved') {
-                                     userFinalStatusMap.set(userId, 'approved');
-                                } else if (existingStatus !== 'approved') {
-                                     if (currentStatus === 'approved') {
-                                         userFinalStatusMap.set(userId, 'approved');
-                                     }
-                                     else if (currentStatus === 'rejected' && existingStatus !== 'rejected') {
-                                         userFinalStatusMap.set(userId, 'rejected');
-                                     }
-                                     else if (currentStatus === 'pending' && existingStatus === undefined) {
-                                         userFinalStatusMap.set(userId, 'pending');
-                                     }
-                                }
-                            }
-                        }); // End submissionsSnap.forEach
-
-                        // ------------------------------------------------
-                        // 2. ประมวลผลสถานะกระบวนการกู้ยืม (Loan Process Status)
-                        // ------------------------------------------------
-
-                        // ดึงสถานะกระบวนการกู้ยืมสำหรับผู้ที่เอกสาร Approved แล้วเท่านั้น
-                        for (const userId of approvedUserIdsInThisTerm) {
-                            try {
-                                const statusRef = doc(db, `loan_process_status_${year}_${term}`, userId);
-                                const statusDoc = await getDoc(statusRef);
-
-                                // สถานะการดำเนินการหลัก: 'processing' หรือ 'completed'
-                                let processStatus = 'inProcess'; 
-
-                                if (statusDoc.exists()) {
-                                    const data = statusDoc.data();
-                                    processStatus = data.overallStatus === 'completed' ? 'completed' : 'inProcess';
-                                } else {
-                                    // ถ้า Document ยังไม่มี แต่เอกสาร Approved แล้ว ถือว่า "In Process"
-                                    processStatus = 'inProcess';
-                                }
-                                
-                                // **ตรรกะสำคัญ:** ใช้สถานะที่พบเป็นสถานะสุดท้ายของผู้ใช้
-                                // (ตรรกะเดียวกัน: การวนลูปจากล่าสุดไปเก่าสุด)
-                                if (processStatus === 'completed') {
-                                    userLoanProcessStatusMap.set(userId, 'completed');
-                                } else if (processStatus === 'inProcess' && userLoanProcessStatusMap.get(userId) !== 'completed') {
-                                    // ถ้าเป็น inProcess และยังไม่เคยถูกบันทึกเป็น completed ให้บันทึกเป็น inProcess
-                                    userLoanProcessStatusMap.set(userId, 'inProcess');
-                                }
-
-                            } catch (e) {
-                                console.log(`Skipping loan_process_status_${year}_${term} for ${userId}: ${e.message}`);
-                            }
-                        }
-
-                    } catch (e) {
-                        console.log(`Skipping collection document_submissions_${year}_${term} or loan_process_status: ${e.message}`);
-                    }
-                })());
+          processSnap.forEach((doc) => {
+            const data = doc.data();
+            if (data.overallStatus === 'processing') {
+              inProcess++;
+            } else if (data.overallStatus === 'completed') {
+              processCompleted++;
             }
-        } // End of loops
-
-        await Promise.all(fetchPromises);
-
-                // ---------------------------------------------------------
-        // 3. การนับจำนวนคนสุดท้ายจาก Map และ Loan Process Map
-        // ---------------------------------------------------------
-        
-        let finalPendingReviewCount = 0;
-        let finalApprovedCount = 0;
-        let finalRejectedCount = 0;
-        let finalInProcessCount = 0;
-        let finalProcessCompletedCount = 0;
-
-        // นับสถานะเอกสาร
-        userFinalStatusMap.forEach(status => {
-            if (status === 'approved') {
-                finalApprovedCount++;
-            } else if (status === 'rejected') {
-                finalRejectedCount++;
-            } else if (status === 'pending') {
-                finalPendingReviewCount++;
-            }
-        });
-
-        // นับสถานะกระบวนการกู้ยืม
-        userLoanProcessStatusMap.forEach(status => {
-            if (status === 'completed') {
-                finalProcessCompletedCount++;
-            } else if (status === 'inProcess') {
-                finalInProcessCount++;
-            }
-        });
-
-
-        // ---------------------------------------------------------
-
-        setStats(prev => ({
-            ...prev,
-            totalStudents: totalStudents,
-            totalSubmissions: totalSubmissionUsers.size, 
-            pendingReview: finalPendingReviewCount, 
-            approved: finalApprovedCount,           
-            rejected: finalRejectedCount,           
-            inProcess: finalInProcessCount,        // จำนวนคนที่อยู่ในกระบวนการกู้ยืม
-            processCompleted: finalProcessCompletedCount, // จำนวนคนที่เสร็จสิ้นกระบวนการกู้ยืม
-            systemStatus: config ? (config.isEnabled ? 'เปิดใช้งาน' : 'ปิดใช้งาน') : 'ปิดใช้งาน'
-        }));
-
-    } catch (error) {
-        console.error("Error fetching dashboard data:", error);
-    } finally {
-        setLoading(false);
+          });
+        } catch (error) {
+          console.log(`Collection loan_process_status_${year}_${term} not found (Skipping)`);
+        }
+      }
     }
-};
+    
+    allActivities.sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+    const recentActivities = allActivities.slice(0, 15);
 
-  const getStatusColor = (status) => {
-    if (status.includes('เปิดใช้งาน')) return '#28a745';
-    if (status === 'รอเปิดใช้งาน') return '#ffc107';
-    return '#dc3545';
+    return {
+      totalStudents,
+      totalSubmissions,
+      pendingReview,
+      approved,
+      rejected,
+      inProcess,
+      processCompleted,
+      recentActivities
+    };
+  };
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      const config = await fetchAppConfig();
+      setSystemConfig(config);
+      const { years, terms } = await fetchAvailablePeriods();
+      const data = await calculateStats(years, terms, selectedPeriod);
+      
+      setStats({
+        totalStudents: data.totalStudents,
+        totalSubmissions: data.totalSubmissions,
+        pendingReview: data.pendingReview,
+        approved: data.approved,
+        rejected: data.rejected,
+        inProcess: data.inProcess,
+        processCompleted: data.processCompleted,
+        systemStatus: config.isEnabled ? 'เปิดใช้งาน' : 'ปิดใช้งาน',
+        recentActivities: data.recentActivities.map(activity => ({
+            ...activity,
+            submittedAt: activity.submittedAt.toISOString()
+        }))
+      });
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const calculateCompletionRate = () => {
-    if (stats.totalSubmissions === 0) return 0;
-    const totalDocuments = stats.approved + stats.rejected + stats.pendingReview;
-    return totalDocuments > 0 ? Math.round((stats.approved / totalDocuments) * 100) : 0;
+    const total = stats.approved + stats.rejected + stats.pendingReview;
+    return total > 0 ? Math.round((stats.approved / total) * 100) : 0;
   };
 
   const getProcessingRate = () => {
@@ -243,574 +227,791 @@ const fetchDashboardData = async () => {
     return total > 0 ? Math.round((stats.processCompleted / total) * 100) : 0;
   };
 
-  if (loading) {
+  const getSubmissionRate = () => {
+    return stats.totalStudents > 0 ? Math.round((stats.totalSubmissions / stats.totalStudents) * 100) : 0;
+  };
+
+  const formatTime = (date) => {
+    return date.toLocaleString('th-TH', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  };
+
+  const getPeriodLabel = () => {
+    switch(selectedPeriod) {
+      case 'today': return 'วันนี้';
+      case 'week': return 'สัปดาห์นี้';
+      case 'month': return 'เดือนนี้';
+      default: return 'เดือนนี้';
+    }
+  };
+
+  const getStatusColor = (status) => {
+    if (status === 'เปิดใช้งาน') return '#10b981';
+    if (status === 'รอเปิดใช้งาน') return '#f59e0b';
+    return '#ef4444';
+  };
+
+  const handleQuickAction = (action) => {
+    navigate(`/${action}`);
+  };
+
+  const handleViewSubmissionDetail = (activity) => {
+    // ⭐️ นำทางไปยัง /document-submission พร้อมส่งค่า studentId, year, และ term ผ่าน Query String
+    const path = `/document-submission?studentId=${activity.student_id}&year=${activity.academicYear}&term=${activity.term}`;
+    navigate(path); 
+  };
+
+  const handleViewAllActivities = () => {
+    console.log('View all activities');
+  };
+
+  const formatDateTime = (isoString) => {
+    const date = new Date(isoString);
+    if (isNaN(date)) return 'N/A';
+    return date.toLocaleString('th-TH', { 
+      day: 'numeric', 
+      month: 'short', 
+      year: 'numeric', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  };
+
+  const getDocumentStatusText = (documentStatuses) => {
+    const statuses = Object.values(documentStatuses).map(d => d.status);
+    const hasRejected = statuses.includes('rejected');
+    const hasPending = statuses.includes('pending');
+    const allApproved = statuses.length > 0 && statuses.every(s => s === 'approved');
+
+    if (hasRejected) return { text: 'เอกสารไม่ถูกต้อง', color: '#ef4444', bgColor: '#fee2e2' };
+    if (allApproved) return { text: 'เอกสารถูกต้อง', color: '#10b981', bgColor: '#d1fae5' };
+    if (hasPending) return { text: 'รอการตรวจสอบ', color: '#f59e0b', bgColor: '#fef3c7' };
+    return { text: 'ส่งแล้ว (รอนับ)', color: '#6b7280', bgColor: '#f3f4f6' };
+  };
+
+  const styles = {
+    container: {
+      minHeight: "100vh",
+      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+      padding: "2rem",
+      fontFamily: "'Kanit', sans-serif",
+    },
+    innerContainer: {
+      maxWidth: "1400px",
+      margin: "0 auto",
+    },
+    header: {
+      background: "rgba(255, 255, 255, 0.95)",
+      backdropFilter: "blur(10px)",
+      borderRadius: "20px",
+      padding: "2rem",
+      marginBottom: "2rem",
+      boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: "1rem",
+    },
+    headerLeft: {
+      flex: 1,
+    },
+    title: {
+      fontSize: "2.5rem",
+      fontWeight: "700",
+      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+      WebkitBackgroundClip: "text",
+      WebkitTextFillColor: "transparent",
+      margin: 0,
+      marginBottom: "0.5rem",
+    },
+    subtitle: {
+      color: "#64748b",
+      fontSize: "1.1rem",
+      margin: 0,
+    },
+    clockCard: {
+      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+      color: "white",
+      padding: "1.5rem 2rem",
+      borderRadius: "15px",
+      textAlign: "center",
+      boxShadow: "0 10px 30px rgba(102, 126, 234, 0.3)",
+    },
+    clockTime: {
+      fontSize: "1.8rem",
+      fontWeight: "700",
+      marginBottom: "0.3rem",
+    },
+    clockDate: {
+      fontSize: "0.9rem",
+      opacity: 0.9,
+    },
+    systemCard: {
+      background: "rgba(255, 255, 255, 0.95)",
+      backdropFilter: "blur(10px)",
+      borderRadius: "20px",
+      padding: "2rem",
+      marginBottom: "2rem",
+      boxShadow: "0 20px 60px rgba(0, 0, 0, 0.15)",
+    },
+    systemHeader: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: "1.5rem",
+      flexWrap: "wrap",
+      gap: "1rem",
+    },
+    systemTitle: {
+      fontSize: "1.5rem",
+      fontWeight: "700",
+      color: "#1e293b",
+      margin: 0,
+      display: "flex",
+      alignItems: "center",
+      gap: "0.5rem",
+    },
+    statusBadge: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "0.5rem",
+      padding: "0.6rem 1.5rem",
+      borderRadius: "50px",
+      fontSize: "1rem",
+      fontWeight: "600",
+      background: getStatusColor(stats.systemStatus),
+      color: "white",
+      boxShadow: "0 4px 15px rgba(0, 0, 0, 0.1)",
+    },
+    statusDot: {
+      width: "8px",
+      height: "8px",
+      borderRadius: "50%",
+      background: "white",
+      animation: "pulse 2s infinite",
+    },
+    periodSelector: {
+      display: "flex",
+      gap: "0.5rem",
+      background: "#f1f5f9",
+      padding: "0.3rem",
+      borderRadius: "12px",
+    },
+    periodButton: {
+      padding: "0.6rem 1.2rem",
+      borderRadius: "10px",
+      border: "none",
+      background: "transparent",
+      color: "#64748b",
+      fontWeight: "600",
+      cursor: "pointer",
+      transition: "all 0.3s ease",
+      fontSize: "0.95rem",
+    },
+    periodButtonActive: {
+      padding: "0.6rem 1.2rem",
+      borderRadius: "10px",
+      border: "none",
+      background: "white",
+      color: "#667eea",
+      fontWeight: "700",
+      cursor: "pointer",
+      boxShadow: "0 4px 15px rgba(102, 126, 234, 0.2)",
+      fontSize: "0.95rem",
+    },
+    systemInfo: {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+      gap: "1rem",
+      padding: "1.5rem",
+      background: "#f8fafc",
+      borderRadius: "15px",
+    },
+    infoItem: {
+      display: "flex",
+      alignItems: "center",
+      gap: "0.5rem",
+    },
+    infoLabel: {
+      fontSize: "0.9rem",
+      color: "#64748b",
+      fontWeight: "600",
+    },
+    infoValue: {
+      fontSize: "1rem",
+      color: "#1e293b",
+      fontWeight: "700",
+    },
+    statsGrid: {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+      gap: "1.5rem",
+      marginBottom: "2rem",
+    },
+    statCard: (gradient, icon) => ({
+      background: "white",
+      borderRadius: "20px",
+      padding: "2rem",
+      boxShadow: "0 10px 40px rgba(0, 0, 0, 0.08)",
+      position: "relative",
+      overflow: "hidden",
+      transition: "all 0.3s ease",
+      cursor: "pointer",
+      border: "2px solid transparent",
+    }),
+    statCardInner: {
+      position: "relative",
+      zIndex: 2,
+    },
+    statIcon: {
+      fontSize: "3rem",
+      marginBottom: "1rem",
+    },
+    statTitle: {
+      fontSize: "0.95rem",
+      color: "#64748b",
+      fontWeight: "600",
+      marginBottom: "0.5rem",
+    },
+    statValue: {
+      fontSize: "2.5rem",
+      fontWeight: "700",
+      color: "#1e293b",
+      marginBottom: "0.5rem",
+    },
+    statSubtext: {
+      fontSize: "0.9rem",
+      color: "#94a3b8",
+      fontWeight: "500",
+    },
+    progressSection: {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+      gap: "1.5rem",
+      marginBottom: "2rem",
+    },
+    progressCard: {
+      background: "white",
+      borderRadius: "20px",
+      padding: "2rem",
+      boxShadow: "0 10px 40px rgba(0, 0, 0, 0.08)",
+    },
+    progressTitle: {
+      fontSize: "1.2rem",
+      fontWeight: "700",
+      color: "#1e293b",
+      marginBottom: "1.5rem",
+    },
+    progressBarContainer: {
+      height: "12px",
+      background: "#f1f5f9",
+      borderRadius: "10px",
+      overflow: "hidden",
+      marginBottom: "1rem",
+    },
+    progressBar: (width, color) => ({
+      height: "100%",
+      width: `${width}%`,
+      background: color,
+      borderRadius: "10px",
+      transition: "width 1s ease",
+      position: "relative",
+    }),
+    progressText: {
+      fontSize: "1rem",
+      color: "#64748b",
+      fontWeight: "600",
+      textAlign: "right",
+    },
+    mainContent: {
+      display: "grid",
+      gridTemplateColumns: "2fr 1fr",
+      gap: "1.5rem",
+    },
+    activitiesCard: {
+      background: "white",
+      borderRadius: "20px",
+      padding: "2rem",
+      boxShadow: "0 10px 40px rgba(0, 0, 0, 0.08)",
+    },
+    activitiesHeader: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: "1.5rem",
+      paddingBottom: "1rem",
+      borderBottom: "2px solid #f1f5f9",
+    },
+    activitiesTitle: {
+      fontSize: "1.5rem",
+      fontWeight: "700",
+      color: "#1e293b",
+      margin: 0,
+    },
+    viewAllButton: {
+      background: "none",
+      border: "none",
+      color: "#667eea",
+      fontWeight: "600",
+      cursor: "pointer",
+      fontSize: "1rem",
+      transition: "all 0.3s ease",
+    },
+    activityList: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "1rem",
+      maxHeight: "600px",
+      overflowY: "auto",
+      paddingRight: "0.5rem",
+    },
+    activityItem: {
+      display: "flex",
+      alignItems: "center",
+      gap: "1rem",
+      padding: "1.2rem",
+      background: "#f8fafc",
+      borderRadius: "15px",
+      border: "2px solid transparent",
+      transition: "all 0.3s ease",
+      cursor: "pointer",
+    },
+    activityIcon: {
+      fontSize: "2.5rem",
+    },
+    activityContent: {
+      flex: 1,
+    },
+    activityName: {
+      fontSize: "1.1rem",
+      fontWeight: "700",
+      color: "#1e293b",
+      marginBottom: "0.3rem",
+    },
+    activityDetail: {
+      fontSize: "0.9rem",
+      color: "#64748b",
+      marginBottom: "0.2rem",
+    },
+    activityTime: {
+      fontSize: "0.85rem",
+      color: "#94a3b8",
+    },
+    activityBadge: (bgColor, color) => ({
+      padding: "0.5rem 1rem",
+      borderRadius: "10px",
+      fontSize: "0.85rem",
+      fontWeight: "600",
+      background: bgColor,
+      color: color,
+      whiteSpace: "nowrap",
+    }),
+    quickActionsCard: {
+      background: "white",
+      borderRadius: "20px",
+      padding: "2rem",
+      boxShadow: "0 10px 40px rgba(0, 0, 0, 0.08)",
+    },
+    quickActionsTitle: {
+      fontSize: "1.5rem",
+      fontWeight: "700",
+      color: "#1e293b",
+      marginBottom: "1.5rem",
+      paddingBottom: "1rem",
+      borderBottom: "2px solid #f1f5f9",
+    },
+    actionButtons: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "1rem",
+    },
+    actionButton: (gradient) => ({
+      padding: "1.2rem 1.5rem",
+      borderRadius: "15px",
+      border: "none",
+      background: gradient,
+      color: "white",
+      fontSize: "1rem",
+      fontWeight: "600",
+      cursor: "pointer",
+      transition: "all 0.3s ease",
+      textAlign: "left",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      boxShadow: "0 4px 15px rgba(0, 0, 0, 0.1)",
+    }),
+    actionCount: {
+      padding: "0.3rem 0.8rem",
+      borderRadius: "8px",
+      background: "rgba(255, 255, 255, 0.2)",
+      fontSize: "0.9rem",
+      fontWeight: "700",
+    },
+    loadingContainer: {
+      minHeight: "100vh",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    },
+    spinnerContainer: {
+      position: "relative",
+      width: "80px",
+      height: "80px",
+      marginBottom: "2rem",
+    },
+    spinner: {
+      position: "absolute",
+      width: "80px",
+      height: "80px",
+      border: "8px solid rgba(255, 255, 255, 0.2)",
+      borderTop: "8px solid white",
+      borderRadius: "50%",
+      animation: "spin 1s linear infinite",
+    },
+    spinnerInner: {
+      position: "absolute",
+      width: "60px",
+      height: "60px",
+      top: "10px",
+      left: "10px",
+      border: "6px solid rgba(255, 255, 255, 0.2)",
+      borderTop: "6px solid white",
+      borderRadius: "50%",
+      animation: "spin 1.5s linear infinite reverse",
+    },
+    loadingText: {
+      fontSize: "1.8rem",
+      fontWeight: "700",
+      color: "white",
+      marginBottom: "0.5rem",
+    },
+    loadingSubtext: {
+      fontSize: "1.1rem",
+      color: "rgba(255, 255, 255, 0.8)",
+    },
+    '@media (max-width: 1024px)': {
+      mainContent: {
+        gridTemplateColumns: "1fr",
+      }
+    },
+
+    if (loading) {
     return (
-      <div style={styles.container}>
-        <div style={styles.loading}>กำลังโหลดข้อมูล...</div>
+      <div style={styles.loadingContainer}>
+        <div style={styles.spinnerContainer}>
+          <div style={styles.spinner}></div>
+          <div style={styles.spinnerInner}></div>
+        </div>
+        <p style={styles.loadingText}>กำลังโหลดข้อมูล...</p>
+        <p style={styles.loadingSubtext}>กรุณารอสักครู่</p>
       </div>
     );
   }
+  };
 
   return (
     <div style={styles.container}>
-      <div style={styles.header}>
-        <h1 style={styles.title}>แดชบอร์ดระบบเอกสาร กยศ.</h1>
-        <p style={styles.subtitle}>ภาพรวมระบบและสถิติการใช้งาน</p>
-      </div>
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+        .stat-card:hover {
+          transform: translateY(-5px);
+          border-color: #667eea !important;
+          box-shadow: 0 20px 60px rgba(102, 126, 234, 0.2) !important;
+        }
+        .activity-item:hover {
+          background: #f1f5f9 !important;
+          border-color: #667eea !important;
+        }
+        .action-btn:hover {
+          transform: translateX(5px);
+          box-shadow: 0 6px 25px rgba(0, 0, 0, 0.15) !important;
+        }
+        .view-all:hover {
+          color: #764ba2 !important;
+        }
+        .period-btn:hover:not(.active) {
+          background: #e2e8f0 !important;
+        }
+        @media (max-width: 1024px) {
+          .main-content {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
 
-      {/* System Status Card */}
-      <div style={{
-        ...styles.systemCard,
-        borderLeft: `4px solid ${getStatusColor(stats.systemStatus)}`
-      }}>
-        <div style={styles.systemCardHeader}>
-          <h2 style={styles.systemCardTitle}>สถานะระบบ</h2>
-          <span style={{
-            ...styles.statusBadge,
-            backgroundColor: getStatusColor(stats.systemStatus)
-          }}>
-            {stats.systemStatus}
-          </span>
-        </div>
-        {systemConfig && (
-          <div style={styles.systemInfo}>
-            <p><strong>ปีการศึกษา:</strong> {systemConfig.academicYear}</p>
-            <p><strong>เทอม:</strong> {systemConfig.term}</p>
-            {!systemConfig.immediateAccess && (
-              <>
-                <p><strong>เปิดรับ:</strong> {systemConfig.startDate} {systemConfig.startTime}</p>
-                <p><strong>ปิดรับ:</strong> {systemConfig.endDate} {systemConfig.endTime}</p>
-              </>
-            )}
+      <div style={styles.innerContainer}>
+        {/* Header */}
+        <div style={styles.header}>
+          <div style={styles.headerLeft}>
+            <h1 style={styles.title}>แดชบอร์ดระบบเอกสาร กยศ.</h1>
+            <p style={styles.subtitle}>ภาพรวมระบบและสถิติการใช้งาน</p>
           </div>
-        )}
-      </div>
-
-      {/* Main Stats Grid */}
-      <div style={styles.statsGrid}>
-        <div style={{...styles.statCard, backgroundColor: '#e3f2fd'}}>
-          <div style={styles.statIcon}>👥</div>
-          <div style={styles.statContent}>
-            <p style={styles.statLabel}>นักศึกษาทั้งหมด</p>
-            <h3 style={styles.statNumber}>{stats.totalStudents}</h3>
-            <p style={styles.statLabel}>คน</p>
-          </div>
-        </div>
-
-        <div style={{...styles.statCard, backgroundColor: '#f3e5f5'}}>
-          <div style={styles.statIcon}>📄</div>
-          <div style={styles.statContent}>
-            <p style={styles.statLabel}>การส่งเอกสารทั้งหมด</p>
-            <h3 style={styles.statNumber}>{stats.totalSubmissions}</h3>
-            <p style={styles.statLabel}>คน</p>
-          </div>
-        </div>
-
-        <div style={{...styles.statCard, backgroundColor: '#fff3e0'}}>
-          <div style={styles.statIcon}>⏳</div>
-          <div style={styles.statContent}>
-            <p style={styles.statLabel}>รอตรวจสอบ</p>
-            <h3 style={styles.statNumber}>{stats.pendingReview}</h3>
-            <p style={styles.statLabel}>คน</p>
+          <div style={styles.clockCard}>
+            <div style={styles.clockTime}>{currentTime.toLocaleTimeString('th-TH')}</div>
+            <div style={styles.clockDate}>{currentTime.toLocaleDateString('th-TH', { 
+              weekday: 'long', 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric' 
+            })}</div>
           </div>
         </div>
 
-        <div style={{...styles.statCard, backgroundColor: '#e8f5e9'}}>
-          <div style={styles.statIcon}>✅</div>
-          <div style={styles.statContent}>
-            <p style={styles.statLabel}>อนุมัติแล้ว</p>
-            <h3 style={styles.statNumber}>{stats.approved}</h3>
-            <p style={styles.statLabel}>คน</p>
-          </div>
-        </div>
-
-        <div style={{...styles.statCard, backgroundColor: '#ffebee'}}>
-          <div style={styles.statIcon}>❌</div>
-          <div style={styles.statContent}>
-            <p style={styles.statLabel}>ไม่อนุมัติ</p>
-            <h3 style={styles.statNumber}>{stats.rejected}</h3>
-            <p style={styles.statLabel}>คน</p>
-          </div>
-        </div>
-
-        <div style={{...styles.statCard, backgroundColor: '#e1f5fe'}}>
-          <div style={styles.statIcon}>🔄</div>
-          <div style={styles.statContent}>
-            <p style={styles.statLabel}>กำลังดำเนินการกู้ยืม</p>
-            <h3 style={styles.statNumber}>{stats.inProcess}</h3>
-            <p style={styles.statLabel}>คน</p>
-          </div>
-        </div>
-
-        <div style={{...styles.statCard, backgroundColor: '#f1f8e9'}}>
-          <div style={styles.statIcon}>🎉</div>
-          <div style={styles.statContent}>
-            <p style={styles.statLabel}>เสร็จสิ้นทั้งหมด</p>
-            <h3 style={styles.statNumber}>{stats.processCompleted}</h3>
-            <p style={styles.statLabel}>คน</p>
-          </div>
-        </div>
-
-        <div style={{...styles.statCard, backgroundColor: '#fce4ec'}}>
-          <div style={styles.statIcon}>📊</div>
-          <div style={styles.statContent}>
-            <h3 style={styles.statNumber}>{calculateCompletionRate()}%</h3>
-            <p style={styles.statLabel}>อัตราการอนุมัติ</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Progress Overview */}
-      <div style={styles.progressSection}>
-        <h2 style={styles.sectionTitle}>ภาพรวมความคืบหน้า</h2>
-        <div style={styles.progressGrid}>
-          <div style={styles.progressCard}>
-            <div style={styles.progressHeader}>
-              <h3 style={styles.progressTitle}>การตรวจสอบเอกสาร</h3>
-              <span style={styles.progressPercentage}>{calculateCompletionRate()}%</span>
-            </div>
-            <div style={styles.progressBarContainer}>
-              <div style={{
-                ...styles.progressBar,
-                width: `${calculateCompletionRate()}%`,
-                backgroundColor: '#28a745'
-              }} />
-            </div>
-            <div style={styles.progressStats}>
-              <span>อนุมัติ: {stats.approved}</span>
-              <span>รอตรวจ: {stats.pendingReview}</span>
-              <span>ไม่ผ่าน: {stats.rejected}</span>
-            </div>
-          </div>
-
-          <div style={styles.progressCard}>
-            <div style={styles.progressHeader}>
-              <h3 style={styles.progressTitle}>กระบวนการกู้ยืม</h3>
-              <span style={styles.progressPercentage}>{getProcessingRate()}%</span>
-            </div>
-            <div style={styles.progressBarContainer}>
-              <div style={{
-                ...styles.progressBar,
-                width: `${getProcessingRate()}%`,
-                backgroundColor: '#007bff'
-              }} />
-            </div>
-            <div style={styles.progressStats}>
-              <span>เสร็จสิ้น: {stats.processCompleted}</span>
-              <span>กำลังดำเนินการ: {stats.inProcess}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Recent Activities */}
-      <div style={styles.recentSection}>
-        <h2 style={styles.sectionTitle}>การส่งเอกสารล่าสุด</h2>
-        <div style={styles.activitiesList}>
-          {recentActivities.length > 0 ? (
-            recentActivities.map((activity) => (
-              <div key={activity.id} style={styles.activityCard}>
-                <div style={styles.activityIcon}>📋</div>
-                <div style={styles.activityContent}>
-                  <p style={styles.activityName}>{activity.userName}</p>
-                  <p style={styles.activityDetail}>
-                    รหัส: {activity.student_id} | 
-                    ปี: {activity.academicYear} | 
-                    เทอม: {activity.term}
-                  </p>
-                  <p style={styles.activityTime}>
-                    {new Date(activity.submittedAt).toLocaleString('th-TH', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                </div>
-                <div style={styles.activityBadge}>
-                  เอกสาร {Object.keys(activity.documentStatuses || {}).length} รายการ
-                </div>
+        {/* System Status */}
+        <div style={styles.systemCard}>
+          <div style={styles.systemHeader}>
+            <div>
+              <h2 style={styles.systemTitle}>
+                ⚙️ สถานะระบบ
+              </h2>
+              <div style={{ marginTop: "1rem" }}>
+                <span style={styles.statusBadge}>
+                  <span style={styles.statusDot}></span>
+                  {stats.systemStatus}
+                </span>
               </div>
-            ))
-          ) : (
-            <p style={styles.noData}>ยังไม่มีการส่งเอกสาร</p>
+            </div>
+            <div style={styles.periodSelector}>
+              <button 
+                className={selectedPeriod === 'today' ? 'active' : ''}
+                style={selectedPeriod === 'today' ? styles.periodButtonActive : styles.periodButton}
+                onClick={() => setSelectedPeriod('today')}
+              >
+                วันนี้
+              </button>
+              <button 
+                className={selectedPeriod === 'week' ? 'active' : ''}
+                style={selectedPeriod === 'week' ? styles.periodButtonActive : styles.periodButton}
+                onClick={() => setSelectedPeriod('week')}
+              >
+                สัปดาห์นี้
+              </button>
+              <button 
+                className={selectedPeriod === 'month' ? 'active' : ''}
+                style={selectedPeriod === 'month' ? styles.periodButtonActive : styles.periodButton}
+                onClick={() => setSelectedPeriod('month')}
+              >
+                เดือนนี้
+              </button>
+            </div>
+          </div>
+          {systemConfig && (
+            <div style={styles.systemInfo}>
+              <div style={styles.infoItem}>
+                <span style={styles.infoLabel}>📅 ปีการศึกษา:</span>
+                <span style={styles.infoValue}>{systemConfig.academicYear}</span>
+              </div>
+              <div style={styles.infoItem}>
+                <span style={styles.infoLabel}>📚 เทอม:</span>
+                <span style={styles.infoValue}>{systemConfig.term}</span>
+              </div>
+              <div style={styles.infoItem}>
+                <span style={styles.infoLabel}>⏰ ช่วงเวลา:</span>
+                <span style={styles.infoValue}>{getPeriodLabel()}</span>
+              </div>
+              {/* <div style={styles.infoItem}>
+                <span style={styles.infoLabel}>🚀 เข้าถึงทันที:</span>
+                <span style={styles.infoValue}>{systemConfig.immediateAccess ? 'ใช่' : 'ไม่'}</span>
+              </div> */}
+            </div>
           )}
         </div>
-      </div>
 
-      {/* Quick Actions */}
-      <div style={styles.quickActions}>
-        <h2 style={styles.sectionTitle}>ลัดเส้นทางด่วน</h2>
-        <div style={styles.actionsGrid}>
-          <button 
-            style={styles.actionButton}
-            onClick={() => window.location.href = '/docs'}
+        {/* Stats Grid */}
+        <div style={styles.statsGrid}>
+          <div 
+            className="stat-card"
+            style={styles.statCard("linear-gradient(135deg, #667eea 0%, #764ba2 100%)", "👥")}
+            onClick={() => handleQuickAction('studentinfo')}
           >
-            <span style={styles.actionIcon}>⚙️</span>
-            <span>จัดการระบบส่งเอกสาร</span>
-          </button>
-          <button 
-            style={styles.actionButton}
-            onClick={() => window.location.href = '/document-submission'}
-          >
-            <span style={styles.actionIcon}>📝</span>
-            <span>ตรวจสอบเอกสาร</span>
-          </button>
-          <button 
-            style={styles.actionButton}
-            onClick={() => window.location.href = '/loan-process'}
-          >
-            <span style={styles.actionIcon}>🔄</span>
-            <span>สถานะการกู้ยืม</span>
-          </button>
-          <button 
-            style={styles.actionButton}
-            onClick={() => window.location.href = '/studentinfo'}
-          >
-            <span style={styles.actionIcon}>👥</span>
-            <span>จัดการนักศึกษา</span>
-          </button>
-          <button 
-            style={styles.actionButton}
-            onClick={() => window.location.href = '/create-post'}
-          >
-            <span style={styles.actionIcon}>📢</span>
-            <span>สร้างประกาศ</span>
-          </button>
-          <button 
-            style={styles.actionButton}
-            onClick={() => window.location.href = '/all-posts'}
-          >
-            <span style={styles.actionIcon}>📋</span>
-            <span>ดูประกาศทั้งหมด</span>
-          </button>
-        </div>
-      </div>
+            <div style={styles.statCardInner}>
+              <div style={styles.statIcon}>👥</div>
+              <div style={styles.statTitle}>จำนวนนักศึกษาทั้งหมด</div>
+              <div style={styles.statValue}>{stats.totalStudents.toLocaleString()}</div>
+              <div style={styles.statSubtext}>อัตราการส่งเอกสาร: {getSubmissionRate()}%</div>
+            </div>
+          </div>
 
-      {/* Summary Cards */}
-      <div style={styles.summarySection}>
-        <div style={styles.summaryCard}>
-          <div style={styles.summaryIcon}>⚠️</div>
-          <div style={styles.summaryContent}>
-            <h3 style={styles.summaryTitle}>ต้องดำเนินการ</h3>
-            <p style={styles.summaryNumber}>{stats.pendingReview}</p>
-            <p style={styles.summaryDescription}>คนรอการตรวจสอบ</p>
+          <div 
+            className="stat-card"
+            style={styles.statCard("linear-gradient(135deg, #f093fb 0%, #f5576c 100%)", "📄")}
+            onClick={() => handleQuickAction('document-submission')}
+          >
+            <div style={styles.statCardInner}>
+              <div style={styles.statIcon}>📄</div>
+              <div style={styles.statTitle}>การส่งเอกสารรวม ({getPeriodLabel()})</div>
+              <div style={styles.statValue}>{stats.totalSubmissions.toLocaleString()}</div>
+              <div style={styles.statSubtext}>ทั้งหมดที่นับได้</div>
+            </div>
+          </div>
+
+          <div 
+            className="stat-card"
+            style={styles.statCard("linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)", "⏳")}
+            onClick={() => handleQuickAction('document-submission')}
+          >
+            <div style={styles.statCardInner}>
+              <div style={styles.statIcon}>⏳</div>
+              <div style={styles.statTitle}>รอการตรวจสอบ ({getPeriodLabel()})</div>
+              <div style={styles.statValue}>{stats.pendingReview.toLocaleString()}</div>
+              <div style={styles.statSubtext}>ต้องดำเนินการด่วน</div>
+            </div>
+          </div>
+
+          <div 
+            className="stat-card"
+            style={styles.statCard("linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)", "❌")}
+            onClick={() => handleQuickAction('document-submission')}
+          >
+            <div style={styles.statCardInner}>
+              <div style={styles.statIcon}>❌</div>
+              <div style={styles.statTitle}>เอกสารไม่ถูกต้อง ({getPeriodLabel()})</div>
+              <div style={styles.statValue}>{stats.rejected.toLocaleString()}</div>
+              <div style={styles.statSubtext}>รอการแก้ไข</div>
+            </div>
+          </div>
+
+          <div 
+            className="stat-card"
+            style={styles.statCard("linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)", "✅")}
+            onClick={() => handleQuickAction('loan-process')}
+          >
+            <div style={styles.statCardInner}>
+              <div style={styles.statIcon}>✅</div>
+              <div style={styles.statTitle}>เอกสารถูกต้อง/อนุมัติ ({getPeriodLabel()})</div>
+              <div style={styles.statValue}>{stats.approved.toLocaleString()}</div>
+              <div style={styles.statSubtext}>พร้อมเตรียมจัดส่งให้ธนาคาร</div>
+            </div>
           </div>
         </div>
 
-        <div style={styles.summaryCard}>
-          <div style={styles.summaryIcon}>🎯</div>
-          <div style={styles.summaryContent}>
-            <h3 style={styles.summaryTitle}>กำลังดำเนินการ</h3>
-            <p style={styles.summaryNumber}>{stats.inProcess}</p>
-            <p style={styles.summaryDescription}>อยู่ระหว่างกระบวนการกู้ยืม</p>
+        {/* Progress Section */}
+        <div style={styles.progressSection}>
+          <div style={styles.progressCard}>
+            <div style={styles.progressTitle}>📈 อัตราการตรวจสอบเอกสาร</div>
+            <div style={styles.progressBarContainer}>
+              <div style={styles.progressBar(calculateCompletionRate(), "linear-gradient(90deg, #667eea 0%, #764ba2 100%)")}></div>
+            </div>
+            <div style={styles.progressText}>
+              {calculateCompletionRate()}% - อนุมัติแล้ว {stats.approved} จาก {stats.approved + stats.rejected + stats.pendingReview} รายการ
+            </div>
+          </div>
+
+          <div style={styles.progressCard}>
+            <div style={styles.progressTitle}>💰 สถานะการดำเนินการกู้ยืม</div>
+            <div style={styles.progressBarContainer}>
+              <div style={styles.progressBar(getProcessingRate(), "linear-gradient(90deg, #f093fb 0%, #f5576c 100%)")}></div>
+            </div>
+            <div style={styles.progressText}>
+              {getProcessingRate()}% - เสร็จสิ้น {stats.processCompleted} จาก {stats.inProcess + stats.processCompleted} รายการ
+            </div>
           </div>
         </div>
 
-        <div style={styles.summaryCard}>
-          <div style={styles.summaryIcon}>✨</div>
-          <div style={styles.summaryContent}>
-            <h3 style={styles.summaryTitle}>สถิติวันนี้</h3>
-            <p style={styles.summaryNumber}>
-              {recentActivities.filter(a => {
-                const today = new Date().toDateString();
-                const activityDate = new Date(a.submittedAt).toDateString();
-                return today === activityDate;
-              }).length}
-            </p>
-            <p style={styles.summaryDescription}>การส่งเอกสารใหม่</p>
+        {/* Main Content */}
+        <div className="main-content" style={styles.mainContent}>
+          {/* Recent Activities */}
+          <div style={styles.activitiesCard}>
+            <div style={styles.activitiesHeader}>
+              <h3 style={styles.activitiesTitle}>🔔 กิจกรรมล่าสุด ({getPeriodLabel()})</h3>
+              <button 
+                className="view-all"
+                style={styles.viewAllButton} 
+                onClick={handleViewAllActivities}
+              >
+                ดูทั้งหมด →
+              </button>
+            </div>
+            <div style={styles.activityList}>
+              {stats.recentActivities.length > 0 ? (
+                stats.recentActivities.map((activity) => {
+                  const statusInfo = getDocumentStatusText(activity.documentStatuses);
+                  return (
+                    <div 
+                      key={activity.id} 
+                      className="activity-item"
+                      style={styles.activityItem}
+                      onClick={() => handleViewSubmissionDetail(activity)}
+                    >
+                      <div style={styles.activityIcon}>📋</div>
+                      <div style={styles.activityContent}>
+                        <div style={styles.activityName}>
+                          {activity.userName} ({activity.student_id})
+                        </div>
+                        <div style={styles.activityDetail}>
+                          ส่งเอกสาร กยศ. ปี {activity.academicYear} เทอม {activity.term}
+                        </div>
+                        <div style={styles.activityTime}>
+                          ⏰ {formatDateTime(activity.submittedAt)}
+                        </div>
+                      </div>
+                      <div style={styles.activityBadge(statusInfo.bgColor, statusInfo.color)}>
+                        {statusInfo.text}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ textAlign: "center", padding: "3rem", color: "#94a3b8" }}>
+                  <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📭</div>
+                  <div style={{ fontSize: "1.1rem", fontWeight: "600" }}>ไม่มีกิจกรรมในช่วงเวลานี้</div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Actions */}
+          <div style={styles.quickActionsCard}>
+            <h3 style={styles.quickActionsTitle}>⚡ ดำเนินการด่วน</h3>
+            <div style={styles.actionButtons}>
+              <button 
+                className="action-btn"
+                style={styles.actionButton("linear-gradient(135deg, #667eea 0%, #764ba2 100%)")}
+                onClick={() => handleQuickAction('document-submission')}
+              >
+                <span>🔍 ตรวจสอบเอกสาร</span>
+                <span style={styles.actionCount}>{stats.pendingReview.toLocaleString()}</span>
+              </button>
+
+              <button 
+                className="action-btn"
+                style={styles.actionButton("linear-gradient(135deg, #f093fb 0%, #f5576c 100%)")}
+                onClick={() => handleQuickAction('loan-process')}
+              >
+                <span>💰 จัดการสถานะการดำเนินการ</span>
+                <span style={styles.actionCount}>{stats.inProcess.toLocaleString()}</span>
+              </button>
+
+              <button 
+                className="action-btn"
+                style={styles.actionButton("linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)")}
+                onClick={() => handleQuickAction('studentinfo')}
+              >
+                <span>👥 ดูข้อมูลนักศึกษา</span>
+                <span style={styles.actionCount}>{stats.totalStudents.toLocaleString()}</span>
+              </button>
+
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
-
-const styles = {
-  container: {
-    padding: 30,
-    maxWidth: 1400,
-    margin: "0 auto",
-    fontFamily: "Arial, sans-serif",
-    backgroundColor: "#f5f7fa",
-    minHeight: "100vh",
-  },
-  loading: {
-    fontSize: 18,
-    color: "#666",
-    textAlign: "center",
-    padding: 50,
-  },
-  header: {
-    marginBottom: 30,
-    textAlign: "center",
-  },
-  title: {
-    fontSize: 36,
-    fontWeight: "bold",
-    color: "#2c3e50",
-    margin: 0,
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: "#7f8c8d",
-    margin: 0,
-  },
-  systemCard: {
-    background: "#fff",
-    padding: 25,
-    borderRadius: 12,
-    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-    marginBottom: 30,
-  },
-  systemCardHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 15,
-  },
-  systemCardTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#2c3e50",
-    margin: 0,
-  },
-  statusBadge: {
-    padding: "8px 16px",
-    borderRadius: 20,
-    color: "white",
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  systemInfo: {
-    fontSize: 14,
-    color: "#555",
-  },
-  statsGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-    gap: 20,
-    marginBottom: 30,
-  },
-  statCard: {
-    background: "#fff",
-    padding: 20,
-    borderRadius: 12,
-    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-    display: "flex",
-    alignItems: "center",
-    gap: 15,
-    transition: "transform 0.2s",
-    cursor: "default",
-  },
-  statIcon: {
-    fontSize: 40,
-  },
-  statContent: {
-    flex: 1,
-  },
-  statNumber: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#2c3e50",
-    margin: 0,
-    marginTop: 5,
-    marginBottom: 5,
-  },
-  statLabel: {
-    fontSize: 14,
-    color: "#7f8c8d",
-    margin: 0,
-  },
-  recentSection: {
-    background: "#fff",
-    padding: 25,
-    borderRadius: 12,
-    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-    marginBottom: 30,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#2c3e50",
-    marginTop: 0,
-    marginBottom: 20,
-  },
-  activitiesList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-  },
-  activityCard: {
-    display: "flex",
-    alignItems: "center",
-    gap: 15,
-    padding: 15,
-    backgroundColor: "#f8f9fa",
-    borderRadius: 8,
-    border: "1px solid #e9ecef",
-  },
-  activityIcon: {
-    fontSize: 30,
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#2c3e50",
-    margin: 0,
-    marginBottom: 5,
-  },
-  activityDetail: {
-    fontSize: 13,
-    color: "#666",
-    margin: 0,
-    marginBottom: 3,
-  },
-  activityTime: {
-    fontSize: 12,
-    color: "#999",
-    margin: 0,
-  },
-  activityBadge: {
-    padding: "6px 12px",
-    backgroundColor: "#e3f2fd",
-    color: "#1976d2",
-    borderRadius: 12,
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  noData: {
-    textAlign: "center",
-    color: "#999",
-    padding: 20,
-    fontSize: 14,
-  },
-  quickActions: {
-    background: "#fff",
-    padding: 25,
-    borderRadius: 12,
-    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-  },
-  actionsGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-    gap: 15,
-  },
-  actionButton: {
-    padding: "15px 20px",
-    backgroundColor: "#f8f9fa",
-    border: "2px solid #e9ecef",
-    borderRadius: 8,
-    cursor: "pointer",
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#495057",
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    transition: "all 0.2s",
-  },
-  actionIcon: {
-    fontSize: 20,
-  },
-  progressSection: {
-    background: "#fff",
-    padding: 25,
-    borderRadius: 12,
-    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-    marginBottom: 30,
-  },
-  progressGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-    gap: 20,
-  },
-  progressCard: {
-    background: "#f8f9fa",
-    padding: 20,
-    borderRadius: 8,
-    border: "1px solid #e9ecef",
-  },
-  progressHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 15,
-  },
-  progressTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#2c3e50",
-    margin: 0,
-  },
-  progressPercentage: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#007bff",
-  },
-  progressBarContainer: {
-    width: "100%",
-    height: 12,
-    backgroundColor: "#e9ecef",
-    borderRadius: 6,
-    overflow: "hidden",
-    marginBottom: 15,
-  },
-  progressBar: {
-    height: "100%",
-    transition: "width 0.3s ease",
-    borderRadius: 6,
-  },
-  progressStats: {
-    display: "flex",
-    justifyContent: "space-between",
-    fontSize: 13,
-    color: "#666",
-  },
-  summarySection: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-    gap: 20,
-    marginBottom: 30,
-  },
-  summaryCard: {
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    padding: 25,
-    borderRadius: 12,
-    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-    color: "white",
-    display: "flex",
-    alignItems: "center",
-    gap: 20,
-  },
-  summaryIcon: {
-    fontSize: 50,
-    opacity: 0.9,
-  },
-  summaryContent: {
-    flex: 1,
-  },
-  summaryTitle: {
-    fontSize: 14,
-    fontWeight: "normal",
-    margin: 0,
-    marginBottom: 8,
-    opacity: 0.9,
-  },
-  summaryNumber: {
-    fontSize: 36,
-    fontWeight: "bold",
-    margin: 0,
-    marginBottom: 5,
-  },
-  summaryDescription: {
-    fontSize: 13,
-    margin: 0,
-    opacity: 0.8,
-  },
-};
