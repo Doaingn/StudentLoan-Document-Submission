@@ -19,10 +19,14 @@ export const handleFileUpload = async (
   volunteerHours,
   appConfig,
   setIsConvertingToPDF,
-  setStorageUploadProgress
+  setStorageUploadProgress,
+  setIsValidatingAI
 ) => {
   try {
-    const DocumentPicker = await import("expo-document-picker");
+    // FIX: ใช้ static import แทน dynamic import
+    const DocumentPicker = require("expo-document-picker");
+
+    // FIX: ใช้ getDocumentAsync โดยตรงจาก DocumentPicker
     const result = await DocumentPicker.getDocumentAsync({
       type: [
         "image/*",
@@ -43,7 +47,124 @@ export const handleFileUpload = async (
     const processedFiles = [];
 
     if (docId === "form_101") {
-      // ... existing form_101 logic ...
+      if (files.length > 4) {
+        Alert.alert(
+          "ข้อผิดพลาด",
+          "เอกสาร Form 101 สามารถอัปโหลดได้สูงสุด 4 ไฟล์เท่านั้น"
+        );
+        return;
+      }
+
+      const imagesToProcess = files.filter((file) =>
+        isImageFile(file.mimeType, file.name)
+      );
+      const otherFiles = files.filter(
+        (file) => !isImageFile(file.mimeType, file.name)
+      );
+
+      // Process non-image files first
+      for (const file of otherFiles) {
+        const fileWithMetadata = {
+          filename: file.name ?? null,
+          uri: file.uri ?? null,
+          mimeType: file.mimeType ?? null,
+          size: file.size ?? null,
+          uploadDate: new Date().toLocaleString("th-TH"),
+          status: "pending",
+          aiValidated: needsAIValidation(docId),
+          fileIndex: (uploads[docId] || []).length + processedFiles.length,
+        };
+
+        // AI validation for non-image files
+        if (needsAIValidation(docId)) {
+          console.log(
+            `🔥 FORM 101 NON-IMAGE - Starting AI validation for ${file.name}...`
+          );
+          const isValid = await performAIValidation(
+            fileWithMetadata,
+            docId,
+            volunteerHours,
+            setVolunteerHours,
+            appConfig,
+            uploads,
+            setIsValidatingAI
+          );
+          if (!isValid) {
+            console.log(
+              `❌ FORM 101 NON-IMAGE - AI validation failed for ${file.name}`
+            );
+            continue; // Skip this file if validation fails
+          }
+          console.log(
+            `✅ FORM 101 NON-IMAGE - AI validation passed for ${file.name}`
+          );
+        }
+
+        processedFiles.push(fileWithMetadata);
+      }
+
+      // Process and merge images if any
+      if (imagesToProcess.length > 0) {
+        setIsConvertingToPDF((prev) => ({
+          ...prev,
+          [`${docId}_merge`]: true,
+        }));
+
+        try {
+          console.log(
+            `🔥 FORM 101 IMAGES - Merging ${imagesToProcess.length} images to PDF...`
+          );
+          const mergedPdfFile = await mergeImagesToPdf(
+            files,
+            docId,
+            setIsConvertingToPDF
+          );
+
+          // AI validation for the merged PDF
+          if (needsAIValidation(docId)) {
+            console.log(`🔥 FORM 101 MERGED PDF - Starting AI validation...`);
+            const isValid = await performAIValidation(
+              mergedPdfFile,
+              docId,
+              volunteerHours,
+              setVolunteerHours,
+              appConfig,
+              uploads,
+              setIsValidatingAI
+            );
+            if (!isValid) {
+              console.log(`❌ FORM 101 MERGED PDF - AI validation failed`);
+              setIsConvertingToPDF((prev) => {
+                const newState = { ...prev };
+                delete newState[`${docId}_merge`];
+                return newState;
+              });
+              return; // Don't add the file if validation fails
+            }
+            console.log(`✅ FORM 101 MERGED PDF - AI validation passed`);
+          }
+
+          processedFiles.push(mergedPdfFile);
+        } catch (error) {
+          console.error("Error merging images to PDF:", error);
+          Alert.alert(
+            "ข้อผิดพลาด",
+            `ไม่สามารถรวมรูปภาพเป็น PDF ได้: ${error.message}`
+          );
+          setIsConvertingToPDF((prev) => {
+            const newState = { ...prev };
+            delete newState[`${docId}_merge`];
+            return newState;
+          });
+          return;
+        } finally {
+          setIsConvertingToPDF((prev) => {
+            const newState = { ...prev };
+            delete newState[`${docId}_merge`];
+            return newState;
+          });
+        }
+      }
     } else {
       // Handle other document types
       for (let i = 0; i < files.length; i++) {
@@ -57,6 +178,7 @@ export const handleFileUpload = async (
         };
 
         if (isImageFile(file.mimeType, file.name)) {
+          // ❌ เอาการ clear state ออกจากที่นี่ เพราะจะทำใน finally ของ convertImageToPDF แล้ว
           try {
             const convertedPdf = await convertImageToPDF(
               file,
@@ -84,24 +206,77 @@ export const handleFileUpload = async (
           processedFile = originalMetadata;
         }
 
-        // AI validation - ส่ง uploads ไปด้วยเพื่อตรวจสอบไฟล์ซ้ำ
-        const { needsAIValidation } = await import("./aiValidationService");
+        // AI validation
+        const { needsAIValidation } = require("./aiValidationService");
         if (needsAIValidation(docId)) {
-          const isValid = await performAIValidation(
-            processedFile,
-            docId,
-            volunteerHours,
-            setVolunteerHours,
-            appConfig,
-            uploads // เพิ่ม parameter นี้
-          );
-          if (!isValid) {
-            console.log(`❌ AI validation failed for ${docId}, skipping file`);
+          // 🔥 SET STATE ก่อนเริ่มตรวจสอบ
+          setIsValidatingAI((prev) => ({
+            ...prev,
+            [docId]: true,
+          }));
+
+          let validationResult = false;
+
+          try {
+            validationResult = await performAIValidation(
+              processedFile,
+              docId,
+              volunteerHours,
+              setVolunteerHours,
+              appConfig,
+              uploads,
+              setIsValidatingAI
+            );
+
+            console.log(
+              `🔍 Validation result for ${docId}: ${validationResult}`
+            );
+
+            if (!validationResult) {
+              console.log(
+                `❌ AI validation failed for ${docId}, skipping file`
+              );
+            } else {
+              console.log(`✅ AI validation passed for ${docId}`);
+            }
+          } catch (error) {
+            console.error(`❌ AI validation error for ${docId}:`, error);
+            validationResult = false;
+          } finally {
+            // 🔥🔥🔥 FORCE CLEAR STATE ใน finally block เพื่อให้แน่ใจว่าจะถูก clear เสมอ
+            console.log(`🧹 Force clearing validation state for ${docId}`);
+
+            // Clear หลายครั้งเพื่อให้แน่ใจ
+            setIsValidatingAI((prev) => {
+              const newState = { ...prev };
+              delete newState[docId];
+              console.log(`🧹 State after clear:`, Object.keys(newState));
+              return newState;
+            });
+
+            // Clear อีกครั้งหลัง microtask
+            await Promise.resolve();
+            setIsValidatingAI((prev) => {
+              const newState = { ...prev };
+              delete newState[docId];
+              return newState;
+            });
+
+            // Clear อีกครั้งหลัง delay สั้นๆ
+            setTimeout(() => {
+              setIsValidatingAI((prev) => {
+                const newState = { ...prev };
+                delete newState[docId];
+                return newState;
+              });
+            }, 50);
+          }
+
+          // ถ้า validation ไม่ผ่าน ให้ skip ไฟล์นี้
+          if (!validationResult) {
             continue;
           }
-          console.log(`✅ AI validation passed for ${docId}`);
         }
-
         const fileWithMetadata = {
           filename: processedFile.filename ?? null,
           uri: processedFile.uri ?? null,
@@ -116,7 +291,6 @@ export const handleFileUpload = async (
             originalImageName: processedFile.originalImageName ?? null,
             originalImageType: processedFile.originalImageType ?? null,
           }),
-          // เก็บชั่วโมงจิตอาสาไว้ในไฟล์
           ...(docId === "volunteer_doc" &&
             processedFile.hours && {
               hours: processedFile.hours,
@@ -127,7 +301,7 @@ export const handleFileUpload = async (
       }
     }
 
-    // Only update uploads if we have processed files (validation passed)
+    // Only update uploads if we have processed files
     if (processedFiles.length > 0) {
       const newUploads = {
         ...uploads,
@@ -144,11 +318,51 @@ export const handleFileUpload = async (
         `❌ No files were added for ${docId} - all validations failed or user cancelled`
       );
     }
+
+    // ✅ FORCE CLEAR ทุก state ที่เกี่ยวข้องกับ docId
+    console.log("🧹 FINAL CLEANUP - Clearing all states for", docId);
+    setIsValidatingAI((prev) => {
+      const newState = { ...prev };
+      delete newState[docId];
+      return newState;
+    });
+
+    setIsConvertingToPDF((prev) => {
+      const newState = { ...prev };
+      // Clear ทั้ง docId และ docId_merge และ docId_[index]
+      Object.keys(newState).forEach((key) => {
+        if (key.startsWith(docId)) {
+          delete newState[key];
+        }
+      });
+      console.log("🧹 Final state keys after cleanup:", Object.keys(newState));
+      return newState;
+    });
   } catch (error) {
+    // ✅ FORCE CLEAR state ใน catch block ด้วย
+    console.log("🧹 ERROR CLEANUP - Clearing all states for", docId);
+
+    setIsValidatingAI((prev) => {
+      const newState = { ...prev };
+      delete newState[docId];
+      return newState;
+    });
+
+    setIsConvertingToPDF((prev) => {
+      const newState = { ...prev };
+      Object.keys(newState).forEach((key) => {
+        if (key.startsWith(docId)) {
+          delete newState[key];
+        }
+      });
+      return newState;
+    });
+
     Alert.alert("เกิดข้อผิดพลาด", "ไม่สามารถเลือกไฟล์ได้");
-    console.error(error);
+    console.error("File upload error:", error);
   }
 };
+
 // Prepare submission data
 export const prepareSubmissionData = async (uploads, surveyData, appConfig) => {
   const currentUser = auth.currentUser;
@@ -189,7 +403,7 @@ export const prepareSubmissionData = async (uploads, surveyData, appConfig) => {
     student_id: studentId ?? null,
     citizen_id: citizenId ?? null,
     surveyData: surveyData ?? null,
-    uploads: {}, // Will be filled with storage uploads
+    uploads: {},
     submittedAt: new Date().toISOString() ?? null,
     status: "submitted" ?? null,
     academicYear: academicYear ?? null,
@@ -205,4 +419,9 @@ export const prepareSubmissionData = async (uploads, surveyData, appConfig) => {
     academicYear,
     term,
   };
+};
+
+// Helper function to check if AI validation is needed
+const needsAIValidation = (docId) => {
+  return docId === "form_101" || docId === "volunteer_doc";
 };

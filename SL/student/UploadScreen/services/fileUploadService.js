@@ -87,16 +87,19 @@ export const uploadFileToStorage = async (
 };
 
 // Convert image to PDF
+// Convert image to PDF
 export const convertImageToPDF = async (
   imageFile,
   docId,
   fileIndex,
   setIsConvertingToPDF
 ) => {
+  const stateKey = `${docId}_${fileIndex}`;
+
   try {
     setIsConvertingToPDF((prev) => ({
       ...prev,
-      [`${docId}_${fileIndex}`]: true,
+      [stateKey]: true,
     }));
 
     const base64Image = await FileSystem.readAsStringAsync(imageFile.uri, {
@@ -111,30 +114,12 @@ export const convertImageToPDF = async (
       <html>
       <head>
         <style>
-          @page {
-            margin: 0;
-            size: A4;
-          }
-          body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-          }
-          img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            display: block;
-          }
+          @page { margin: 0; size: A4; }
+          body { margin: 0; padding: 0; width: 100%; height: 100%; }
+          img { max-width: 100%; max-height: 100%; object-fit: contain; }
         </style>
       </head>
-      <body>
-        <img src="${base64DataUri}" />
-      </body>
+      <body><img src="${base64DataUri}" /></body>
       </html>
     `;
 
@@ -148,13 +133,13 @@ export const convertImageToPDF = async (
     const nameWithoutExtension = originalName.replace(/\.[^/.]+$/, "");
 
     const pdfFile = {
-      filename: `${docId}.pdf`,
+      filename: `${nameWithoutExtension}.pdf`,
       uri: pdfUri,
       mimeType: "application/pdf",
       size: pdfInfo.size,
       uploadDate: new Date().toLocaleString("th-TH"),
       status: "pending",
-      aiValidated: false, // Will be set based on needsAIValidation later
+      aiValidated: false,
       fileIndex: fileIndex,
       convertedFromImage: true,
       originalImageName: imageFile.filename ?? null,
@@ -166,9 +151,12 @@ export const convertImageToPDF = async (
     console.error("Error converting image to PDF:", error);
     throw new Error(`ไม่สามารถแปลงรูปภาพเป็น PDF ได้: ${error.message}`);
   } finally {
+    // ✅ ใช้ finally เพื่อให้แน่ใจว่าจะ clear state เสมอ
+    console.log("🧹 FINALLY: Clearing convertImageToPDF state for:", stateKey);
     setIsConvertingToPDF((prev) => {
       const newState = { ...prev };
-      delete newState[`${docId}_${fileIndex}`];
+      delete newState[stateKey];
+      console.log("🧹 Remaining keys:", Object.keys(newState));
       return newState;
     });
   }

@@ -277,7 +277,8 @@ export const performAIValidation = async (
   volunteerHours,
   setVolunteerHours,
   appConfig,
-  uploads // เพิ่ม parameter uploads เพื่อตรวจสอบไฟล์ซ้ำ
+  uploads,
+  setIsValidatingAI
 ) => {
   const aiBackendAvailable = await checkAIBackendStatus();
 
@@ -302,9 +303,10 @@ export const performAIValidation = async (
       );
 
       if (isDuplicate) {
+        const Alert = require("react-native").Alert;
         Alert.alert(
           "ไฟล์ซ้ำ",
-          "คุณได้อัพโหลดไฟล์นี้ไปแล้ว กรุณาเลือกไฟล์อื่น",
+          "คุณได้อัปโหลดไฟล์นี้ไปแล้ว กรุณาเลือกไฟล์อื่น",
           [{ text: "ตกลง" }]
         );
         return false;
@@ -357,29 +359,52 @@ export const performAIValidation = async (
               onPress: async () => {
                 console.log("✓ User accepted volunteer document");
 
-                // อัพเดทชั่วโมงจิตอาสาใน state
-                setVolunteerHours(newTotal);
+                try {
+                  // อัพเดทชั่วโมงจิตอาสาใน state
+                  setVolunteerHours(newTotal);
 
-                // บันทึกชั่วโมงจิตอาสาลง Firebase
-                await saveVolunteerHoursToFirebase(newTotal, appConfig);
+                  // บันทึกชั่วโมงจิตอาสาลง Firebase
+                  await saveVolunteerHoursToFirebase(newTotal, appConfig);
 
-                // เก็บผลการตรวจสอบ AI ลงฐานข้อมูล
-                await saveAIValidationResult(validationDataForDB);
+                  // เก็บผลการตรวจสอบ AI ลงฐานข้อมูล
+                  await saveAIValidationResult(validationDataForDB);
 
-                // ตั้งค่า hours ให้กับไฟล์
-                file.hours = hours;
+                  // ตั้งค่า hours ให้กับไฟล์
+                  file.hours = hours;
 
-                if (newTotal >= 36) {
-                  Alert.alert(
-                    "ครบชั่วโมงจิตอาสาแล้ว",
-                    `คุณสะสมครบ ${newTotal} ชั่วโมง`
+                  if (newTotal >= 36) {
+                    Alert.alert(
+                      "ครบชั่วโมงจิตอาสาแล้ว",
+                      `คุณสะสมครบ ${newTotal} ชั่วโมง`
+                    );
+                  }
+
+                  console.log("✅ Volunteer document accepted successfully");
+                  resolve(true);
+
+                } catch (error) {
+                  console.error(
+                    "Error in volunteer document acceptance:",
+                    error
                   );
-                }
 
-                resolve(true);
+                  Alert.alert(
+                    "เกิดข้อผิดพลาด",
+                    "ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่"
+                  );
+                  resolve(false);
+                } finally {
+                  // ✅ เคลียร์ state เสมอ
+                  setIsValidatingAI((prev) => {
+                    const newState = { ...prev };
+                    delete newState[docId];
+                    return newState;
+                  });
+                }
               },
             },
-          ]
+          ],
+          { cancelable: false }
         );
       });
     }
@@ -392,10 +417,16 @@ export const performAIValidation = async (
         async () => {
           console.log(`✓ AI Validation passed for ${file.filename} (${docId})`);
 
-          // เก็บผลการตรวจสอบ AI ลงฐานข้อมูล
-          await saveAIValidationResult(validationDataForDB);
+          try {
+            // เก็บผลการตรวจสอบ AI ลงฐานข้อมูล
+            await saveAIValidationResult(validationDataForDB);
 
-          resolve(true);
+            console.log("✅ Validation accepted successfully");
+            resolve(true);
+          } catch (error) {
+            console.error("Error saving validation result:", error);
+            resolve(true); // ยังคง resolve true เพราะ validation ผ่านแล้ว
+          }
         },
         () => {
           console.log(`✗ AI Validation failed for ${file.filename} (${docId})`);
@@ -408,7 +439,6 @@ export const performAIValidation = async (
     throw error;
   }
 };
-
 // Get user AI validation history
 export const getUserAIValidationHistory = async (userId, limit = 20) => {
   try {
