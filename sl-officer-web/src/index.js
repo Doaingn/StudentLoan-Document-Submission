@@ -1,0 +1,19 @@
+// [file name]: index.js (แก้ไข)
+// [file content begin]
+import React from "react";
+import ReactDOM from "react-dom/client";
+import "./index.css";
+import App from "./App";
+import { AuthProvider } from "./AuthContext";
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(
+  <React.StrictMode>
+    <AuthProvider>
+      <App />
+    </AuthProvider>
+  </React.StrictMode>
+);
+
+// หากไม่ใช้ reportWebVitals ให้ลบการ import และเรียกใช้ออก
+// [file content end]
