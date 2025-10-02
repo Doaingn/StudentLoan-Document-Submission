@@ -87,7 +87,6 @@ export const uploadFileToStorage = async (
 };
 
 // Convert image to PDF
-// Convert image to PDF
 export const convertImageToPDF = async (
   imageFile,
   docId,
@@ -129,11 +128,9 @@ export const convertImageToPDF = async (
     });
 
     const pdfInfo = await FileSystem.getInfoAsync(pdfUri);
-    const originalName = imageFile.filename || imageFile.name || "image";
-    const nameWithoutExtension = originalName.replace(/\.[^/.]+$/, "");
 
     const pdfFile = {
-      filename: `${nameWithoutExtension}.pdf`,
+      filename: `${docId}.pdf`,
       uri: pdfUri,
       mimeType: "application/pdf",
       size: pdfInfo.size,
