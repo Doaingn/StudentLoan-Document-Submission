@@ -1,8 +1,13 @@
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom"; 
+import { useSearchParams } from "react-router-dom";
 import { db } from "./database/firebase";
-import { collection, getDocs, doc, updateDoc, getDoc } from "firebase/firestore";
-
+import {
+  collection,
+  getDocs,
+  doc,
+  updateDoc,
+  getDoc,
+} from "firebase/firestore";
 
 const StudentDocumentSubmission = () => {
   const [submissions, setSubmissions] = useState([]);
@@ -12,7 +17,7 @@ const StudentDocumentSubmission = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("pending");
   const [appConfig, setAppConfig] = useState(null);
-  
+
   // เพิ่ม state สำหรับฟิลเตอร์ปีการศึกษาและเทอม
   const [yearFilter, setYearFilter] = useState("all");
   const [termFilter, setTermFilter] = useState("all");
@@ -20,43 +25,44 @@ const StudentDocumentSubmission = () => {
   const [availableTerms, setAvailableTerms] = useState([]);
 
   const [searchParams] = useSearchParams();
-  const studentIdParam = searchParams.get('studentId');
-  const yearParam = searchParams.get('year');
-  const termParam = searchParams.get('term');
-  
+  const studentIdParam = searchParams.get("studentId");
+  const yearParam = searchParams.get("year");
+  const termParam = searchParams.get("term");
+
   // Document type mappings in Thai
   const documentTypes = {
-    'form_101': 'กยศ 101',
-    'volunteer_doc' : 'เอกสารจิตอาสา',
-    'id_copies_student': 'สำเนาบัตรประชาชนนักศึกษา',
-    'consent_student_form': 'หนังสือยินยอมเปิดเผยข้อมูลนักศึกษา',
-    'consent_father_form': 'หนังสือยินยอมเปิดเผยข้อมูลบิดา',
-    'id_copies_consent_father_form':'สำเนาบัตรประชาชนมารดา',
-    'id_copies_father': 'สำเนาบัตรประชาชนบิดา',
-    'consent_mother_form': 'หนังสือยินยอมเปิดเผยข้อมูลมารดา',
-    'id_copies_mother': 'สำเนาบัตรประชาชนมารดา',
-    'id_copies_consent_mother_form':'สำเนาบัตรประชาชนมารดา',
-    'guardian_consent' : 'หนังสือยินยอมเปิดเผยข้อมูลผู้ปกครong',
-    'guardian_income_cert': 'หนังสือรับรองรายได้ผู้ปกครอง',
-    'father_income_cert': 'หนังสือรับรองรายได้บิดา',
-    'fa_id_copies_gov' : 'สำเนาบัตรข้าราชการผู้รับรอง',
-    'mother_income_cert': 'หนังสือรับรองรายได้มารดา',
-    'mo_id_copies_gov' : 'สำเนาบัตรข้าราชการผู้รับรอง',
-    'single_parent_income_cert': 'หนังสือรับรองรายได้',
-    'single_parent_income': 'หนังสือรับรองเงินเดือน',
-    'famo_income_cert': 'หนังสือรับรองรายได้บิดามารดา',
-    'famo_id_copies_gov': 'สำเนาบัตรข้าราชการผู้รับรอง',
-    'family_status_cert': 'หนังสือรับรองสถานภาพครอบครัว',
-    'father_income': 'หนังสือรับรองเงินเดือนบิดา',
-    'mother_income': 'หนังสือรับรองเงินเดือนมารดา',
-    'legal_status' : 'สำเนาใบหย่า (กรณีหย่าร้าง) หรือ สำเนาใบมรณบัตร (กรณีเสียชีวิต)',
-    'fam_id_copies_gov' : 'สำเนาบัตรข้าราชการผู้รับรอง',
-    '102_id_copies_gov' : 'สำเนาบัตรข้าราชการผู้รับรอง',
-    'guardian_id_copies' : 'สำเนาบัตรประชาชนผู้ปกครอง',
-    'guardian_income' : 'หนังสือรับรองเงินเดือนผู้ปกครอง',
-    'guar_id_copies_gov' : 'สำเนาบัตรข้าราชการผู้รับรอง',
-    'disbursement_form' : 'แบบยืนยันการเบิกเงินกู้ยืม',
-    'expense_burden_form' : 'ใบภาระค่าใช้จ่ายทุน',
+    form_101: "กยศ 101",
+    volunteer_doc: "เอกสารจิตอาสา",
+    id_copies_student: "สำเนาบัตรประชาชนนักศึกษา",
+    consent_student_form: "หนังสือยินยอมเปิดเผยข้อมูลนักศึกษา",
+    consent_father_form: "หนังสือยินยอมเปิดเผยข้อมูลบิดา",
+    id_copies_consent_father_form: "สำเนาบัตรประชาชนมารดา",
+    id_copies_father: "สำเนาบัตรประชาชนบิดา",
+    consent_mother_form: "หนังสือยินยอมเปิดเผยข้อมูลมารดา",
+    id_copies_mother: "สำเนาบัตรประชาชนมารดา",
+    id_copies_consent_mother_form: "สำเนาบัตรประชาชนมารดา",
+    guardian_consent: "หนังสือยินยอมเปิดเผยข้อมูลผู้ปกครong",
+    guardian_income_cert: "หนังสือรับรองรายได้ผู้ปกครอง",
+    father_income_cert: "หนังสือรับรองรายได้บิดา",
+    fa_id_copies_gov: "สำเนาบัตรข้าราชการผู้รับรอง",
+    mother_income_cert: "หนังสือรับรองรายได้มารดา",
+    mo_id_copies_gov: "สำเนาบัตรข้าราชการผู้รับรอง",
+    single_parent_income_cert: "หนังสือรับรองรายได้",
+    single_parent_income: "หนังสือรับรองเงินเดือน",
+    famo_income_cert: "หนังสือรับรองรายได้บิดามารดา",
+    famo_id_copies_gov: "สำเนาบัตรข้าราชการผู้รับรอง",
+    family_status_cert: "หนังสือรับรองสถานภาพครอบครัว",
+    father_income: "หนังสือรับรองเงินเดือนบิดา",
+    mother_income: "หนังสือรับรองเงินเดือนมารดา",
+    legal_status:
+      "สำเนาใบหย่า (กรณีหย่าร้าง) หรือ สำเนาใบมรณบัตร (กรณีเสียชีวิต)",
+    fam_id_copies_gov: "สำเนาบัตรข้าราชการผู้รับรอง",
+    "102_id_copies_gov": "สำเนาบัตรข้าราชการผู้รับรอง",
+    guardian_id_copies: "สำเนาบัตรประชาชนผู้ปกครอง",
+    guardian_income: "หนังสือรับรองเงินเดือนผู้ปกครอง",
+    guar_id_copies_gov: "สำเนาบัตรข้าราชการผู้รับรอง",
+    disbursement_form: "แบบยืนยันการเบิกเงินกู้ยืม",
+    expense_burden_form: "ใบภาระค่าใช้จ่ายทุน",
   };
 
   const statusOptions = {
@@ -69,8 +75,7 @@ const StudentDocumentSubmission = () => {
     fetchData();
   }, []);
 
-
-    // ⭐️ [NEW EFFECT] 1. ตั้งค่า filter ตาม URL ที่ส่งมาจาก Dashboard ⭐️
+  // ⭐️ [NEW EFFECT] 1. ตั้งค่า filter ตาม URL ที่ส่งมาจาก Dashboard ⭐️
   useEffect(() => {
     // ตั้งค่า yearFilter และ termFilter ให้ตรงกับ URL
     if (yearParam && yearFilter !== yearParam) {
@@ -82,138 +87,147 @@ const StudentDocumentSubmission = () => {
     // setSearchTerm(studentIdParam || ""); // สามารถตั้งค่า searchTerm ได้เลย
   }, [studentIdParam, yearParam, termParam]);
 
-
   // ⭐️ [NEW EFFECT] 2. เลือกรายการเอกสารโดยอัตโนมัติ เมื่อข้อมูลโหลดเสร็จ ⭐️
   useEffect(() => {
     // Logic นี้จะทำงานเมื่อ submissions ถูกโหลดเข้ามาแล้ว (จากการเปลี่ยน yearFilter/termFilter)
     if (studentIdParam && submissions.length > 0) {
-      const initialSelection = submissions.find(sub => 
-        // ค้นหาจาก student_id
-        sub.student_id === studentIdParam 
+      const initialSelection = submissions.find(
+        (sub) =>
+          // ค้นหาจาก student_id
+          sub.student_id === studentIdParam
       );
 
       if (initialSelection) {
         setSelectedSubmission(initialSelection);
         setSearchTerm(initialSelection.student_id); // ตั้งค่า searchTerm เพื่อให้ตารางกรองเหลือรายการเดียว
-        
+
         // ล้างพารามิเตอร์ใน URL หลังจากการเลือกสำเร็จ (เพื่อไม่ให้เปิดซ้ำเมื่อ Refresh)
-        if (typeof window !== 'undefined' && window.history) {
-          window.history.replaceState(null, '', window.location.pathname); 
+        if (typeof window !== "undefined" && window.history) {
+          window.history.replaceState(null, "", window.location.pathname);
         }
       }
     }
-    
   }, [submissions, studentIdParam]); // ขึ้นอยู่กับข้อมูล submissions และ studentIdParam
 
   const fetchAppConfig = async () => {
-      try {
-        const configRef = doc(db, "DocumentService", "config");
-        const configDoc = await getDoc(configRef);
-  
-        if (configDoc.exists()) {
-          const config = configDoc.data();
-          setAppConfig(config);
-          console.log("App config loaded:", config);
-          return config;
-        } else {
-          const defaultConfig = {
-            academicYear: "2567",
-            term: "1",
-            isEnabled: true,
-            immediateAccess: true,
-          };
-          setAppConfig(defaultConfig);
-          return defaultConfig;
-        }
-      } catch (error) {
-        console.error("Error fetching app config:", error);
-        return null;
-      }
-    };
+    try {
+      const configRef = doc(db, "DocumentService", "config");
+      const configDoc = await getDoc(configRef);
 
-    // ฟังก์ชันสำหรับดึงรายการปีการศึกษาและเทอมที่มีประวัติการเปิดระบบ
-const fetchAvailablePeriods = async () => {
-  try {
-    const periodsRef = doc(db, "DocumentService", "submission_periods_history");
-    const periodsDoc = await getDoc(periodsRef);
-    
-    if (periodsDoc.exists()) {
-      const data = periodsDoc.data();
-      // ดึง availableYears และ availableTerms หากไม่มีให้เป็น Array ว่าง
-      return {
-        years: Array.isArray(data.availableYears) ? data.availableYears : [],
-        // เทอมมักจะมีแค่ 1, 2, 3 ดังนั้นใช้ค่า Default เพื่อความชัวร์หากไม่มีประวัติเทอม
-        terms: Array.isArray(data.availableTerms) ? data.availableTerms : ['1', '2', '3'], 
-      };
+      if (configDoc.exists()) {
+        const config = configDoc.data();
+        setAppConfig(config);
+        console.log("App config loaded:", config);
+        return config;
+      } else {
+        const defaultConfig = {
+          academicYear: "2567",
+          term: "1",
+          isEnabled: true,
+          immediateAccess: true,
+        };
+        setAppConfig(defaultConfig);
+        return defaultConfig;
+      }
+    } catch (error) {
+      console.error("Error fetching app config:", error);
+      return null;
     }
-    // กรณีที่ Document ประวัติยังไม่มีการสร้าง
-    return { years: [], terms: ['1', '2', '3'] }; 
-  } catch (error) {
-    console.error("Error fetching available periods:", error);
-    return { years: [], terms: ['1', '2', '3'] };
-  }
-};
+  };
+
+  // ฟังก์ชันสำหรับดึงรายการปีการศึกษาและเทอมที่มีประวัติการเปิดระบบ
+  const fetchAvailablePeriods = async () => {
+    try {
+      const periodsRef = doc(
+        db,
+        "DocumentService",
+        "submission_periods_history"
+      );
+      const periodsDoc = await getDoc(periodsRef);
+
+      if (periodsDoc.exists()) {
+        const data = periodsDoc.data();
+        // ดึง availableYears และ availableTerms หากไม่มีให้เป็น Array ว่าง
+        return {
+          years: Array.isArray(data.availableYears) ? data.availableYears : [],
+          // เทอมมักจะมีแค่ 1, 2, 3 ดังนั้นใช้ค่า Default เพื่อความชัวร์หากไม่มีประวัติเทอม
+          terms: Array.isArray(data.availableTerms)
+            ? data.availableTerms
+            : ["1", "2", "3"],
+        };
+      }
+      // กรณีที่ Document ประวัติยังไม่มีการสร้าง
+      return { years: [], terms: ["1", "2", "3"] };
+    } catch (error) {
+      console.error("Error fetching available periods:", error);
+      return { years: [], terms: ["1", "2", "3"] };
+    }
+  };
 
   // ฟังก์ชันสำหรับดึงข้อมูลจากทุก collection ที่มี pattern document_submissions_
-const fetchAllSubmissions = async () => {
+  const fetchAllSubmissions = async () => {
     try {
-        // 1. ดึงรายการปีและเทอมที่เคยมีการเปิดระบบจาก Document ประวัติ
-        const { years, terms } = await fetchAvailablePeriods();
-        
-        // หากไม่พบปีใด ๆ ในประวัติ จะไม่ดำเนินการดึงข้อมูล
-        if (years.length === 0) {
-            console.log("No available periods found in history. Skipping submission fetch.");
-            setAvailableYears([]);
-            setAvailableTerms(terms.sort());
-            return [];
-        }
+      // 1. ดึงรายการปีและเทอมที่เคยมีการเปิดระบบจาก Document ประวัติ
+      const { years, terms } = await fetchAvailablePeriods();
 
-        let allSubmissions = [];
-        let fetchedYears = new Set();
-        let fetchedTerms = new Set();
-
-        // 2. วนลูปเพื่อดึงข้อมูลจาก Collection จริงตามปีและเทอมที่ได้มา
-        for (const year of years) {
-            for (const term of terms) {
-                try {
-                    // สร้างชื่อ Collection แบบ Dynamic
-                    const submissionsRef = collection(db, `document_submissions_${year}_${term}`);
-                    const submissionsSnap = await getDocs(submissionsRef);
-                    
-                    if (!submissionsSnap.empty) {
-                        submissionsSnap.forEach((doc) => {
-                            const data = { id: doc.id, ...doc.data() };
-                            data.academicYear = year;
-                            data.submissionTerm = term;
-                            allSubmissions.push(data);
-                        });
-                        // บันทึกเฉพาะปี/เทอมที่มีข้อมูลจริง
-                        fetchedYears.add(year);
-                        fetchedTerms.add(term);
-                    }
-                } catch (error) {
-                }
-            }
-        }
-
-        // 3. ตั้งค่า Years และ Terms ที่มีข้อมูลจริงสำหรับ Filter
-        // เรียงลำดับปีจากมากไปน้อย (ล่าสุดก่อน)
-        setAvailableYears(Array.from(fetchedYears).sort().reverse()); 
-        setAvailableTerms(Array.from(fetchedTerms).sort());
-        
-        return allSubmissions;
-    } catch (error) {
-        console.error("Error fetching all submissions:", error);
+      // หากไม่พบปีใด ๆ ในประวัติ จะไม่ดำเนินการดึงข้อมูล
+      if (years.length === 0) {
+        console.log(
+          "No available periods found in history. Skipping submission fetch."
+        );
+        setAvailableYears([]);
+        setAvailableTerms(terms.sort());
         return [];
+      }
+
+      let allSubmissions = [];
+      let fetchedYears = new Set();
+      let fetchedTerms = new Set();
+
+      // 2. วนลูปเพื่อดึงข้อมูลจาก Collection จริงตามปีและเทอมที่ได้มา
+      for (const year of years) {
+        for (const term of terms) {
+          try {
+            // สร้างชื่อ Collection แบบ Dynamic
+            const submissionsRef = collection(
+              db,
+              `document_submissions_${year}_${term}`
+            );
+            const submissionsSnap = await getDocs(submissionsRef);
+
+            if (!submissionsSnap.empty) {
+              submissionsSnap.forEach((doc) => {
+                const data = { id: doc.id, ...doc.data() };
+                data.academicYear = year;
+                data.submissionTerm = term;
+                allSubmissions.push(data);
+              });
+              // บันทึกเฉพาะปี/เทอมที่มีข้อมูลจริง
+              fetchedYears.add(year);
+              fetchedTerms.add(term);
+            }
+          } catch (error) {}
+        }
+      }
+
+      // 3. ตั้งค่า Years และ Terms ที่มีข้อมูลจริงสำหรับ Filter
+      // เรียงลำดับปีจากมากไปน้อย (ล่าสุดก่อน)
+      setAvailableYears(Array.from(fetchedYears).sort().reverse());
+      setAvailableTerms(Array.from(fetchedTerms).sort());
+
+      return allSubmissions;
+    } catch (error) {
+      console.error("Error fetching all submissions:", error);
+      return [];
     }
-};
+  };
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      
+
       const config = await fetchAppConfig();
-      
+
       // ดึงข้อมูลจากทุก collection
       const submissionsData = await fetchAllSubmissions();
 
@@ -243,7 +257,7 @@ const fetchAllSubmissions = async () => {
   ) => {
     try {
       // หา submission ที่ต้องการอัปเดต
-      const submission = submissions.find(s => s.id === submissionId);
+      const submission = submissions.find((s) => s.id === submissionId);
       if (!submission) {
         console.error("Submission not found");
         return;
@@ -293,23 +307,33 @@ const fetchAllSubmissions = async () => {
   };
 
   // ฟังก์ชันสำหรับอัพเดทหลายๆ เอกสารพร้อมกัน
-  const updateMultipleDocuments = async (submissionId, documentTypes, status, comments) => {
+  const updateMultipleDocuments = async (
+    submissionId,
+    documentTypes,
+    status,
+    comments
+  ) => {
     try {
       // หา submission ที่ต้องการอัปเดต
-      const submission = submissions.find(s => s.id === submissionId);
+      const submission = submissions.find((s) => s.id === submissionId);
       if (!submission) {
         console.error("Submission not found");
         return;
       }
-      
-      const submissionRef = doc(db, `document_submissions_${submission.academicYear}_${submission.submissionTerm}`, submissionId);
+
+      const submissionRef = doc(
+        db,
+        `document_submissions_${submission.academicYear}_${submission.submissionTerm}`,
+        submissionId
+      );
       const updateData = {};
 
       // สร้าง updateData สำหรับเอกสารหลายตัว
-      documentTypes.forEach(docType => {
+      documentTypes.forEach((docType) => {
         updateData[`documentStatuses.${docType}.status`] = status;
         updateData[`documentStatuses.${docType}.comments`] = comments;
-        updateData[`documentStatuses.${docType}.reviewedAt`] = new Date().toISOString();
+        updateData[`documentStatuses.${docType}.reviewedAt`] =
+          new Date().toISOString();
         updateData[`documentStatuses.${docType}.reviewedBy`] = "admin";
       });
 
@@ -320,7 +344,7 @@ const fetchAllSubmissions = async () => {
         prev.map((sub) => {
           if (sub.id === submissionId) {
             const newDocumentStatuses = { ...sub.documentStatuses };
-            documentTypes.forEach(docType => {
+            documentTypes.forEach((docType) => {
               newDocumentStatuses[docType] = {
                 ...newDocumentStatuses[docType],
                 status,
@@ -350,15 +374,18 @@ const fetchAllSubmissions = async () => {
 
     // Enhanced search - ค้นหาชื่อ, รหัสนักศึกษา, และเลขบัตรประจำตัวประชาชน
     const searchLower = searchTerm.toLowerCase();
-    const matchesSearch = userName.toLowerCase().includes(searchLower) ||
-                         studentId.toLowerCase().includes(searchLower) ||
-                         citizenId.toLowerCase().includes(searchLower);
+    const matchesSearch =
+      userName.toLowerCase().includes(searchLower) ||
+      studentId.toLowerCase().includes(searchLower) ||
+      citizenId.toLowerCase().includes(searchLower);
 
     // Year filter
-    const matchesYear = yearFilter === "all" || submission.academicYear === yearFilter;
-    
-    // Term filter  
-    const matchesTerm = termFilter === "all" || submission.submissionTerm === termFilter;
+    const matchesYear =
+      yearFilter === "all" || submission.academicYear === yearFilter;
+
+    // Term filter
+    const matchesTerm =
+      termFilter === "all" || submission.submissionTerm === termFilter;
 
     // Status filter
     let matchesStatus = true;
@@ -403,7 +430,10 @@ const fetchAllSubmissions = async () => {
         newSelected.add(docType);
       }
       setSelectedDocuments(newSelected);
-      setSelectAll(newSelected.size === Object.keys(submission.documentStatuses || {}).length);
+      setSelectAll(
+        newSelected.size ===
+          Object.keys(submission.documentStatuses || {}).length
+      );
     };
 
     // ฟังก์ชันสำหรับเลือกทั้งหมด
@@ -411,7 +441,9 @@ const fetchAllSubmissions = async () => {
       if (selectAll) {
         setSelectedDocuments(new Set());
       } else {
-        setSelectedDocuments(new Set(Object.keys(submission.documentStatuses || {})));
+        setSelectedDocuments(
+          new Set(Object.keys(submission.documentStatuses || {}))
+        );
       }
       setSelectAll(!selectAll);
     };
@@ -423,22 +455,26 @@ const fetchAllSubmissions = async () => {
         return;
       }
 
-      if (window.confirm(`ต้องการอัพเดทสถานะของเอกสาร ${selectedDocuments.size} รายการเป็น "${statusOptions[bulkStatus]}" หรือไม่?`)) {
+      if (
+        window.confirm(
+          `ต้องการอัพเดทสถานะของเอกสาร ${selectedDocuments.size} รายการเป็น "${statusOptions[bulkStatus]}" หรือไม่?`
+        )
+      ) {
         await updateMultipleDocuments(
           submission.id,
           Array.from(selectedDocuments),
           bulkStatus,
           bulkComments
         );
-        
+
         // รีเซ็ตการเลือก
         setSelectedDocuments(new Set());
         setSelectAll(false);
         setBulkComments("");
-        
+
         // รีเซ็ต document states
         initializeDocumentStates();
-        
+
         alert("อัพเดทสถานะเรียบร้อยแล้ว");
       }
     };
@@ -496,7 +532,7 @@ const fetchAllSubmissions = async () => {
               เลือกทั้งหมด ({selectedDocuments.size} รายการ)
             </label>
           </div>
-          
+
           {selectedDocuments.size > 0 && (
             <div style={styles.bulkActionsContainer}>
               <div style={styles.bulkInputsRow}>
@@ -544,8 +580,8 @@ const fetchAllSubmissions = async () => {
             const isSelected = selectedDocuments.has(docType);
 
             return (
-              <div 
-                key={docType} 
+              <div
+                key={docType}
                 style={{
                   ...styles.documentCard,
                   ...(isSelected ? styles.documentCardSelected : {}),
@@ -707,8 +743,10 @@ const fetchAllSubmissions = async () => {
           style={styles.select}
         >
           <option value="all">ทุกปีการศึกษา</option>
-          {availableYears.map(year => (
-            <option key={year} value={year}>ปีการศึกษา {year}</option>
+          {availableYears.map((year) => (
+            <option key={year} value={year}>
+              ปีการศึกษา {year}
+            </option>
           ))}
         </select>
 
@@ -718,8 +756,10 @@ const fetchAllSubmissions = async () => {
           style={styles.select}
         >
           <option value="all">ทุกเทอม</option>
-          {availableTerms.map(term => (
-            <option key={term} value={term}>เทอม {term}</option>
+          {availableTerms.map((term) => (
+            <option key={term} value={term}>
+              เทอม {term}
+            </option>
           ))}
         </select>
 
@@ -743,25 +783,37 @@ const fetchAllSubmissions = async () => {
         </div>
         <div style={styles.statItem}>
           <span style={styles.statNumber}>
-            {filteredSubmissions.filter(s => 
-              Object.values(s.documentStatuses || {}).some(doc => doc.status === 'pending')
-            ).length}
+            {
+              filteredSubmissions.filter((s) =>
+                Object.values(s.documentStatuses || {}).some(
+                  (doc) => doc.status === "pending"
+                )
+              ).length
+            }
           </span>
           <span style={styles.statLabel}>รอตรวจสอบ</span>
         </div>
         <div style={styles.statItem}>
           <span style={styles.statNumber}>
-            {filteredSubmissions.filter(s => 
-              Object.values(s.documentStatuses || {}).some(doc => doc.status === 'approved')
-            ).length}
+            {
+              filteredSubmissions.filter((s) =>
+                Object.values(s.documentStatuses || {}).some(
+                  (doc) => doc.status === "approved"
+                )
+              ).length
+            }
           </span>
           <span style={styles.statLabel}>ผ่านแล้ว</span>
         </div>
         <div style={styles.statItem}>
           <span style={styles.statNumber}>
-            {filteredSubmissions.filter(s => 
-              Object.values(s.documentStatuses || {}).some(doc => doc.status === 'rejected')
-            ).length}
+            {
+              filteredSubmissions.filter((s) =>
+                Object.values(s.documentStatuses || {}).some(
+                  (doc) => doc.status === "rejected"
+                )
+              ).length
+            }
           </span>
           <span style={styles.statLabel}>ไม่ผ่าน</span>
         </div>

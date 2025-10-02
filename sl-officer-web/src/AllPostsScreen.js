@@ -3,9 +3,9 @@ import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
 import { db } from "./database/firebase";
 import { useNavigate } from "react-router-dom";
 // นำเข้าไอคอนจาก react-icons
-import { 
-  MdNewspaper, 
-  MdSearch, 
+import {
+  MdNewspaper,
+  MdSearch,
   MdFilterList,
   MdSchool,
   MdFavorite,
@@ -17,31 +17,31 @@ import {
   MdAccessTime,
   MdDescription,
   MdImage,
-  MdClose
+  MdClose,
 } from "react-icons/md";
 
 const POST_TYPES = ["ทั่วไป", "ทุนการศึกษา", "ชั่วโมงจิตอาสา", "จ้างงาน"];
 
 const TYPE_COLORS = {
-  "ทั่วไป": { 
-    bg: "#e3f2fd", 
-    color: "#1976d2", 
-    icon: MdAnnouncement 
+  ทั่วไป: {
+    bg: "#e3f2fd",
+    color: "#1976d2",
+    icon: MdAnnouncement,
   },
-  "ทุนการศึกษา": { 
-    bg: "#f3e5f5", 
-    color: "#7b1fa2", 
-    icon: MdSchool 
+  ทุนการศึกษา: {
+    bg: "#f3e5f5",
+    color: "#7b1fa2",
+    icon: MdSchool,
   },
-  "ชั่วโมงจิตอาสา": { 
-    bg: "#fff3e0", 
-    color: "#e65100", 
-    icon: MdFavorite 
+  ชั่วโมงจิตอาสา: {
+    bg: "#fff3e0",
+    color: "#e65100",
+    icon: MdFavorite,
   },
-  "จ้างงาน": { 
-    bg: "#e8f5e9", 
-    color: "#2e7d32", 
-    icon: MdWork 
+  จ้างงาน: {
+    bg: "#e8f5e9",
+    color: "#2e7d32",
+    icon: MdWork,
   },
 };
 
@@ -149,7 +149,7 @@ export default function AllPostsScreen() {
               style={styles.searchInput}
             />
           </div>
-          
+
           <div style={styles.selectWrapper}>
             <MdFilterList style={styles.selectIcon} />
             <select
@@ -201,7 +201,7 @@ export default function AllPostsScreen() {
             const TypeIcon = typeInfo.icon;
             const count = posts.filter((p) => p.postType === type).length;
             const isActive = typeFilter === type;
-            
+
             return (
               <button
                 key={type}
@@ -290,11 +290,13 @@ function PostCard({ post, onDelete }) {
       {/* Content */}
       <div style={styles.cardContent}>
         <h3 style={styles.postTitle}>{post.title}</h3>
-        
+
         <div
           style={styles.postDescription}
           dangerouslySetInnerHTML={{
-            __html: post.description?.substring(0, 150) + (post.description?.length > 150 ? "..." : "")
+            __html:
+              post.description?.substring(0, 150) +
+              (post.description?.length > 150 ? "..." : ""),
           }}
         />
 
@@ -311,9 +313,7 @@ function PostCard({ post, onDelete }) {
               />
             ))}
             {post.mediaURLs.length > 3 && (
-              <div style={styles.moreMedia}>
-                +{post.mediaURLs.length - 3}
-              </div>
+              <div style={styles.moreMedia}>+{post.mediaURLs.length - 3}</div>
             )}
           </div>
         )}
@@ -332,13 +332,16 @@ function PostCard({ post, onDelete }) {
             <MdAccessTime size={16} style={{ color: "#94a3b8" }} />
             <span style={styles.dateText}>
               {post.createdAt
-                ? new Date(post.createdAt.toDate()).toLocaleDateString("th-TH", {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
+                ? new Date(post.createdAt.toDate()).toLocaleDateString(
+                    "th-TH",
+                    {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }
+                  )
                 : "ไม่ระบุวันที่"}
             </span>
           </div>
@@ -390,7 +393,8 @@ const styles = {
     minHeight: "100vh",
     padding: "2rem",
     background: "linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)",
-    fontFamily: "'Kanit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    fontFamily:
+      "'Kanit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
   headerSection: {
     maxWidth: "1400px",

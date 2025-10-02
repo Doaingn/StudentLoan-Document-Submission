@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
 import { db } from "./database/firebase";
-import { 
-  collection, 
-  getDocs, 
-  doc, 
-  updateDoc, 
+import {
+  collection,
+  getDocs,
+  doc,
+  updateDoc,
   setDoc,
   getDoc,
   query,
-  where 
+  where,
 } from "firebase/firestore";
 
 const LoanProcessManagement = () => {
@@ -19,51 +19,50 @@ const LoanProcessManagement = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [appConfig, setAppConfig] = useState(null);
-  
+
   // เพิ่ม state สำหรับฟิลเตอร์ปีการศึกษาและเทอม
   const [yearFilter, setYearFilter] = useState("all");
   const [termFilter, setTermFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [availableYears, setAvailableYears] = useState([]);
   const [availableTerms, setAvailableTerms] = useState([]);
-  
+
   // Bulk selection states
   const [selectedUsers, setSelectedUsers] = useState(new Set());
   const [selectAll, setSelectAll] = useState(false);
   const [showBulkControls, setShowBulkControls] = useState(false);
-  const [bulkStep, setBulkStep] = useState('document_collection');
-  const [bulkStatus, setBulkStatus] = useState('pending');
-  const [bulkNote, setBulkNote] = useState('');
-  
+  const [bulkStep, setBulkStep] = useState("document_collection");
+  const [bulkStatus, setBulkStatus] = useState("pending");
+  const [bulkNote, setBulkNote] = useState("");
 
   // Process steps configuration
   const processSteps = [
     {
-      id: 'document_collection',
-      title: 'รวบรวมเอกสาร',
-      description: 'เจ้าหน้าที่กำลังรวบรวมเอกสารของผู้กู้ทั้งหมด',
+      id: "document_collection",
+      title: "รวบรวมเอกสาร",
+      description: "เจ้าหน้าที่กำลังรวบรวมเอกสารของผู้กู้ทั้งหมด",
     },
     {
-      id: 'document_organization',
-      title: 'จัดเรียงเอกสาร',
-      description: 'จัดเรียงเอกสารเพื่อเตรียมส่งให้ธนาคาร',
+      id: "document_organization",
+      title: "จัดเรียงเอกสาร",
+      description: "จัดเรียงเอกสารเพื่อเตรียมส่งให้ธนาคาร",
     },
     {
-      id: 'bank_submission',
-      title: 'ส่งเอกสารไปยังธนาคาร',
-      description: 'ส่งเอกสารให้ธนาคารพิจารณาการกู้ยืม',
+      id: "bank_submission",
+      title: "ส่งเอกสารไปยังธนาคาร",
+      description: "ส่งเอกสารให้ธนาคารพิจารณาการกู้ยืม",
     },
   ];
 
   const stepStatusOptions = {
-    pending: 'รอดำเนินการ',
-    in_progress: 'กำลังดำเนินการ',
-    completed: 'เสร็จสิ้น'
+    pending: "รอดำเนินการ",
+    in_progress: "กำลังดำเนินการ",
+    completed: "เสร็จสิ้น",
   };
 
   const overallStatusOptions = {
-    processing: 'กำลังดำเนินการ',
-    completed: 'เสร็จสิ้นทั้งหมด'
+    processing: "กำลังดำเนินการ",
+    completed: "เสร็จสิ้นทั้งหมด",
   };
 
   useEffect(() => {
@@ -99,20 +98,26 @@ const LoanProcessManagement = () => {
   // ฟังก์ชันสำหรับดึงรายการปีการศึกษาและเทอมที่มีประวัติการเปิดระบบ
   const fetchAvailablePeriods = async () => {
     try {
-      const periodsRef = doc(db, "DocumentService", "submission_periods_history");
+      const periodsRef = doc(
+        db,
+        "DocumentService",
+        "submission_periods_history"
+      );
       const periodsDoc = await getDoc(periodsRef);
-      
+
       if (periodsDoc.exists()) {
         const data = periodsDoc.data();
         return {
           years: Array.isArray(data.availableYears) ? data.availableYears : [],
-          terms: Array.isArray(data.availableTerms) ? data.availableTerms : ['1', '2', '3'], 
+          terms: Array.isArray(data.availableTerms)
+            ? data.availableTerms
+            : ["1", "2", "3"],
         };
       }
-      return { years: [], terms: ['1', '2', '3'] }; 
+      return { years: [], terms: ["1", "2", "3"] };
     } catch (error) {
       console.error("Error fetching available periods:", error);
-      return { years: [], terms: ['1', '2', '3'] };
+      return { years: [], terms: ["1", "2", "3"] };
     }
   };
 
@@ -121,15 +126,17 @@ const LoanProcessManagement = () => {
     try {
       // 1. ดึงรายการปีและเทอมที่เคยมีการเปิดระบบจาก Document ประวัติ
       const { years, terms } = await fetchAvailablePeriods();
-      
+
       // หากไม่พบปีใด ๆ ในประวัติ จะไม่ดำเนินการดึงข้อมูล
       if (years.length === 0) {
-        console.log("No available periods found in history. Skipping submission fetch.");
+        console.log(
+          "No available periods found in history. Skipping submission fetch."
+        );
         setAvailableYears([]);
         setAvailableTerms(terms.sort());
         return { submissions: [], processStatuses: {} };
       }
-      
+
       let allSubmissions = [];
       let allProcessStatuses = {};
       let allYears = new Set();
@@ -139,25 +146,31 @@ const LoanProcessManagement = () => {
         for (const term of terms) {
           try {
             // ดึงข้อมูล document submissions
-            const submissionsRef = collection(db, `document_submissions_${year}_${term}`);
+            const submissionsRef = collection(
+              db,
+              `document_submissions_${year}_${term}`
+            );
             const submissionsSnap = await getDocs(submissionsRef);
-            
+
             if (!submissionsSnap.empty) {
               const yearTermSubmissions = [];
-              
+
               submissionsSnap.forEach((doc) => {
                 const data = doc.data();
                 // Check if all documents are approved
-                const allApproved = Object.values(data.documentStatuses || {}).every(
-                  doc => doc.status === 'approved'
-                );
-                
-                if (allApproved && Object.keys(data.documentStatuses || {}).length > 0) {
-                  const submissionData = { 
-                    id: doc.id, 
-                    ...data, 
+                const allApproved = Object.values(
+                  data.documentStatuses || {}
+                ).every((doc) => doc.status === "approved");
+
+                if (
+                  allApproved &&
+                  Object.keys(data.documentStatuses || {}).length > 0
+                ) {
+                  const submissionData = {
+                    id: doc.id,
+                    ...data,
                     academicYear: year,
-                    submissionTerm: term
+                    submissionTerm: term,
                   };
                   yearTermSubmissions.push(submissionData);
                   allYears.add(year);
@@ -170,26 +183,39 @@ const LoanProcessManagement = () => {
               // ดึงข้อมูล process statuses สำหรับ submissions ที่มีการอนุมัติ
               for (const submission of yearTermSubmissions) {
                 try {
-                  const statusDoc = await getDoc(doc(db, `loan_process_status_${year}_${term}`, submission.userId));
+                  const statusDoc = await getDoc(
+                    doc(
+                      db,
+                      `loan_process_status_${year}_${term}`,
+                      submission.userId
+                    )
+                  );
                   if (statusDoc.exists()) {
                     allProcessStatuses[submission.userId] = statusDoc.data();
                   }
                 } catch (error) {
-                  console.log(`Process status for user ${submission.userId} in ${year}_${term} not found`);
+                  console.log(
+                    `Process status for user ${submission.userId} in ${year}_${term} not found`
+                  );
                 }
               }
             }
           } catch (error) {
             // Collection ไม่มี - ข้ามไป
-            console.log(`Collection document_submissions_${year}_${term} not found`);
+            console.log(
+              `Collection document_submissions_${year}_${term} not found`
+            );
           }
         }
       }
 
       setAvailableYears(Array.from(allYears).sort());
       setAvailableTerms(Array.from(allTerms).sort());
-      
-      return { submissions: allSubmissions, processStatuses: allProcessStatuses };
+
+      return {
+        submissions: allSubmissions,
+        processStatuses: allProcessStatuses,
+      };
     } catch (error) {
       console.error("Error fetching all submissions:", error);
       return { submissions: [], processStatuses: {} };
@@ -228,27 +254,39 @@ const LoanProcessManagement = () => {
   const updateProcessStatus = async (userId, stepId, status, note) => {
     try {
       // หา submission ที่ตรงกับ userId เพื่อใช้ academicYear และ term ที่ถูกต้อง
-      const submission = approvedSubmissions.find(s => s.userId === userId);
+      const submission = approvedSubmissions.find((s) => s.userId === userId);
       if (!submission) {
         console.error("Submission not found for userId:", userId);
         return;
       }
 
-      const processDocRef = doc(db, `loan_process_status_${submission.academicYear}_${submission.submissionTerm}`, userId);
-      
+      const processDocRef = doc(
+        db,
+        `loan_process_status_${submission.academicYear}_${submission.submissionTerm}`,
+        userId
+      );
+
       // Get current process status or create default
       let currentStatus = processStatuses[userId];
       if (!currentStatus) {
         currentStatus = {
-          currentStep: 'document_collection',
+          currentStep: "document_collection",
           steps: {
-            document_collection: { status: 'pending', updatedAt: null, note: null },
-            document_organization: { status: 'pending', updatedAt: null, note: null },
-            bank_submission: { status: 'pending', updatedAt: null, note: null }
+            document_collection: {
+              status: "pending",
+              updatedAt: null,
+              note: null,
+            },
+            document_organization: {
+              status: "pending",
+              updatedAt: null,
+              note: null,
+            },
+            bank_submission: { status: "pending", updatedAt: null, note: null },
           },
-          overallStatus: 'processing',
+          overallStatus: "processing",
           createdAt: new Date().toISOString(),
-          lastUpdatedAt: new Date().toISOString()
+          lastUpdatedAt: new Date().toISOString(),
         };
       }
 
@@ -258,29 +296,31 @@ const LoanProcessManagement = () => {
         [stepId]: {
           status,
           updatedAt: new Date().toISOString(),
-          note: note || null
-        }
+          note: note || null,
+        },
       };
 
       // Determine current step and overall status
       let newCurrentStep = stepId;
-      let newOverallStatus = 'processing';
+      let newOverallStatus = "processing";
 
       // If current step is completed, move to next step
-      if (status === 'completed') {
-        const stepIndex = processSteps.findIndex(step => step.id === stepId);
+      if (status === "completed") {
+        const stepIndex = processSteps.findIndex((step) => step.id === stepId);
         if (stepIndex < processSteps.length - 1) {
           newCurrentStep = processSteps[stepIndex + 1].id;
         }
-        
+
         // Check if all steps are completed
-        const allCompleted = processSteps.every(step => 
-          step.id === stepId ? true : updatedSteps[step.id]?.status === 'completed'
+        const allCompleted = processSteps.every((step) =>
+          step.id === stepId
+            ? true
+            : updatedSteps[step.id]?.status === "completed"
         );
-        
+
         if (allCompleted) {
-          newOverallStatus = 'completed';
-          newCurrentStep = 'bank_submission'; // Keep at last step if all completed
+          newOverallStatus = "completed";
+          newCurrentStep = "bank_submission"; // Keep at last step if all completed
         }
       }
 
@@ -289,15 +329,15 @@ const LoanProcessManagement = () => {
         currentStep: newCurrentStep,
         steps: updatedSteps,
         overallStatus: newOverallStatus,
-        lastUpdatedAt: new Date().toISOString()
+        lastUpdatedAt: new Date().toISOString(),
       };
 
       await setDoc(processDocRef, updatedStatus, { merge: true });
 
       // Update local state
-      setProcessStatuses(prev => ({
+      setProcessStatuses((prev) => ({
         ...prev,
-        [userId]: updatedStatus
+        [userId]: updatedStatus,
       }));
 
       return true;
@@ -312,7 +352,7 @@ const LoanProcessManagement = () => {
     try {
       const results = {
         success: [],
-        failed: []
+        failed: [],
       };
 
       for (const userId of userIds) {
@@ -349,7 +389,7 @@ const LoanProcessManagement = () => {
       setSelectedUsers(new Set());
       setShowBulkControls(false);
     } else {
-      const allUserIds = filteredSubmissions.map(sub => sub.userId);
+      const allUserIds = filteredSubmissions.map((sub) => sub.userId);
       setSelectedUsers(new Set(allUserIds));
       setShowBulkControls(true);
     }
@@ -363,10 +403,14 @@ const LoanProcessManagement = () => {
       return;
     }
 
-    const stepName = processSteps.find(s => s.id === bulkStep)?.title;
+    const stepName = processSteps.find((s) => s.id === bulkStep)?.title;
     const statusName = stepStatusOptions[bulkStatus];
 
-    if (!window.confirm(`ต้องการอัพเดทขั้นตอน "${stepName}" เป็น "${statusName}" สำหรับผู้กู้ ${selectedUsers.size} คนหรือไม่?`)) {
+    if (
+      !window.confirm(
+        `ต้องการอัพเดทขั้นตอน "${stepName}" เป็น "${statusName}" สำหรับผู้กู้ ${selectedUsers.size} คนหรือไม่?`
+      )
+    ) {
       return;
     }
 
@@ -381,7 +425,9 @@ const LoanProcessManagement = () => {
       if (results.failed.length === 0) {
         alert(`อัพเดทสำเร็จทั้งหมด ${results.success.length} คน`);
       } else {
-        alert(`อัพเดทสำเร็จ ${results.success.length} คน, ล้มเหลว ${results.failed.length} คน`);
+        alert(
+          `อัพเดทสำเร็จ ${results.success.length} คน, ล้มเหลว ${results.failed.length} คน`
+        );
         console.error("Failed updates:", results.failed);
       }
 
@@ -389,10 +435,9 @@ const LoanProcessManagement = () => {
       setSelectedUsers(new Set());
       setSelectAll(false);
       setShowBulkControls(false);
-      setBulkNote('');
-
+      setBulkNote("");
     } catch (error) {
-      alert('เกิดข้อผิดพลาดในการอัพเดท');
+      alert("เกิดข้อผิดพลาดในการอัพเดท");
       console.error(error);
     }
   };
@@ -405,21 +450,24 @@ const LoanProcessManagement = () => {
 
     // Enhanced search - ค้นหาชื่อ, รหัสนักศึกษา, และเลขบัตรประจำตัวประชาชน
     const searchLower = searchTerm.toLowerCase();
-    const matchesSearch = userName.toLowerCase().includes(searchLower) ||
-                         studentId.toLowerCase().includes(searchLower) ||
-                         citizenId.toLowerCase().includes(searchLower);
+    const matchesSearch =
+      userName.toLowerCase().includes(searchLower) ||
+      studentId.toLowerCase().includes(searchLower) ||
+      citizenId.toLowerCase().includes(searchLower);
 
     // Year filter
-    const matchesYear = yearFilter === "all" || submission.academicYear === yearFilter;
-    
-    // Term filter  
-    const matchesTerm = termFilter === "all" || submission.submissionTerm === termFilter;
+    const matchesYear =
+      yearFilter === "all" || submission.academicYear === yearFilter;
+
+    // Term filter
+    const matchesTerm =
+      termFilter === "all" || submission.submissionTerm === termFilter;
 
     // Status filter
     let matchesStatus = true;
     if (statusFilter !== "all") {
       const userProcessStatus = processStatuses[submission.userId];
-      const overallStatus = userProcessStatus?.overallStatus || 'processing';
+      const overallStatus = userProcessStatus?.overallStatus || "processing";
       matchesStatus = overallStatus === statusFilter;
     }
 
@@ -428,14 +476,14 @@ const LoanProcessManagement = () => {
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'completed':
-        return '✓';
-      case 'in_progress':
-        return '⏳';
-      case 'pending':
-        return '○';
+      case "completed":
+        return "✓";
+      case "in_progress":
+        return "⏳";
+      case "pending":
+        return "○";
       default:
-        return '○';
+        return "○";
     }
   };
 
@@ -445,37 +493,42 @@ const LoanProcessManagement = () => {
 
     useEffect(() => {
       const initialStates = {};
-      processSteps.forEach(step => {
+      processSteps.forEach((step) => {
         const currentStepStatus = userProcessStatus?.steps?.[step.id];
         initialStates[step.id] = {
-          status: currentStepStatus?.status || 'pending',
-          note: currentStepStatus?.note || ''
+          status: currentStepStatus?.status || "pending",
+          note: currentStepStatus?.note || "",
         };
       });
       setStepStates(initialStates);
     }, [userId, userProcessStatus]);
 
     const handleStatusChange = (stepId, newStatus) => {
-      setStepStates(prev => ({
+      setStepStates((prev) => ({
         ...prev,
-        [stepId]: { ...prev[stepId], status: newStatus }
+        [stepId]: { ...prev[stepId], status: newStatus },
       }));
     };
 
     const handleNoteChange = (stepId, note) => {
-      setStepStates(prev => ({
+      setStepStates((prev) => ({
         ...prev,
-        [stepId]: { ...prev[stepId], note }
+        [stepId]: { ...prev[stepId], note },
       }));
     };
 
     const handleSave = async (stepId) => {
       try {
         const stepState = stepStates[stepId];
-        await updateProcessStatus(userId, stepId, stepState.status, stepState.note);
-        alert('อัพเดทสถานะเรียบร้อยแล้ว');
+        await updateProcessStatus(
+          userId,
+          stepId,
+          stepState.status,
+          stepState.note
+        );
+        alert("อัพเดทสถานะเรียบร้อยแล้ว");
       } catch (error) {
-        alert('เกิดข้อผิดพลาดในการอัพเดทสถานะ');
+        alert("เกิดข้อผิดพลาดในการอัพเดทสถานะ");
       }
     };
 
@@ -484,31 +537,46 @@ const LoanProcessManagement = () => {
         <div style={styles.modalContent}>
           <div style={styles.modalHeader}>
             <h2>จัดการสถานะการดำเนินการ</h2>
-            <h3>ผู้กู้: {users[userId]?.name || 'ไม่ระบุชื่อ'}</h3>
-            <button onClick={onClose} style={styles.closeButton}>×</button>
+            <h3>ผู้กู้: {users[userId]?.name || "ไม่ระบุชื่อ"}</h3>
+            <button onClick={onClose} style={styles.closeButton}>
+              ×
+            </button>
           </div>
 
           <div style={styles.currentStatus}>
             <h4>สถานะปัจจุบัน</h4>
-            <p>ขั้นตอนปัจจุบัน: {processSteps.find(s => s.id === userProcessStatus?.currentStep)?.title || 'รวบรวมเอกสาร'}</p>
-            <p>สถานะโดยรวม: {overallStatusOptions[userProcessStatus?.overallStatus] || 'กำลังดำเนินการ'}</p>
+            <p>
+              ขั้นตอนปัจจุบัน:{" "}
+              {processSteps.find((s) => s.id === userProcessStatus?.currentStep)
+                ?.title || "รวบรวมเอกสาร"}
+            </p>
+            <p>
+              สถานะโดยรวม:{" "}
+              {overallStatusOptions[userProcessStatus?.overallStatus] ||
+                "กำลังดำเนินการ"}
+            </p>
           </div>
 
           <div style={styles.stepsContainer}>
             {processSteps.map((step, index) => {
-              const stepState = stepStates[step.id] || { status: 'pending', note: '' };
+              const stepState = stepStates[step.id] || {
+                status: "pending",
+                note: "",
+              };
               const currentStepStatus = userProcessStatus?.steps?.[step.id];
 
               return (
                 <div key={step.id} style={styles.stepCard}>
                   <h4>{step.title}</h4>
                   <p style={styles.stepDescription}>{step.description}</p>
-                  
+
                   <div style={styles.statusRow}>
                     <label style={styles.label}>สถานะ:</label>
                     <select
                       value={stepState.status}
-                      onChange={(e) => handleStatusChange(step.id, e.target.value)}
+                      onChange={(e) =>
+                        handleStatusChange(step.id, e.target.value)
+                      }
                       style={styles.select}
                     >
                       <option value="pending">รอดำเนินการ</option>
@@ -521,7 +589,9 @@ const LoanProcessManagement = () => {
                     <label style={styles.label}>หมายเหตุ:</label>
                     <textarea
                       value={stepState.note}
-                      onChange={(e) => handleNoteChange(step.id, e.target.value)}
+                      onChange={(e) =>
+                        handleNoteChange(step.id, e.target.value)
+                      }
                       style={styles.textarea}
                       placeholder="ใส่หมายเหตุเพิ่มเติม (ถ้ามี)"
                       rows={3}
@@ -530,13 +600,17 @@ const LoanProcessManagement = () => {
 
                   {currentStepStatus?.updatedAt && (
                     <div style={styles.lastUpdated}>
-                      อัพเดทล่าสุด: {new Date(currentStepStatus.updatedAt).toLocaleDateString('th-TH', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
+                      อัพเดทล่าสุด:{" "}
+                      {new Date(currentStepStatus.updatedAt).toLocaleDateString(
+                        "th-TH",
+                        {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        }
+                      )}
                     </div>
                   )}
 
@@ -581,8 +655,10 @@ const LoanProcessManagement = () => {
           style={styles.select}
         >
           <option value="all">ทุกปีการศึกษา</option>
-          {availableYears.map(year => (
-            <option key={year} value={year}>ปีการศึกษา {year}</option>
+          {availableYears.map((year) => (
+            <option key={year} value={year}>
+              ปีการศึกษา {year}
+            </option>
           ))}
         </select>
 
@@ -592,8 +668,10 @@ const LoanProcessManagement = () => {
           style={styles.select}
         >
           <option value="all">ทุกเทอม</option>
-          {availableTerms.map(term => (
-            <option key={term} value={term}>เทอม {term}</option>
+          {availableTerms.map((term) => (
+            <option key={term} value={term}>
+              เทอม {term}
+            </option>
           ))}
         </select>
 
@@ -616,19 +694,26 @@ const LoanProcessManagement = () => {
         </div>
         <div style={styles.statItem}>
           <span style={styles.statNumber}>
-            {filteredSubmissions.filter(s => {
-              const userProcessStatus = processStatuses[s.userId];
-              return userProcessStatus?.overallStatus === 'processing' || !userProcessStatus;
-            }).length}
+            {
+              filteredSubmissions.filter((s) => {
+                const userProcessStatus = processStatuses[s.userId];
+                return (
+                  userProcessStatus?.overallStatus === "processing" ||
+                  !userProcessStatus
+                );
+              }).length
+            }
           </span>
           <span style={styles.statLabel}>กำลังดำเนินการ</span>
         </div>
         <div style={styles.statItem}>
           <span style={styles.statNumber}>
-            {filteredSubmissions.filter(s => {
-              const userProcessStatus = processStatuses[s.userId];
-              return userProcessStatus?.overallStatus === 'completed';
-            }).length}
+            {
+              filteredSubmissions.filter((s) => {
+                const userProcessStatus = processStatuses[s.userId];
+                return userProcessStatus?.overallStatus === "completed";
+              }).length
+            }
           </span>
           <span style={styles.statLabel}>เสร็จสิ้นแล้ว</span>
         </div>
@@ -651,7 +736,7 @@ const LoanProcessManagement = () => {
       {showBulkControls && (
         <div style={styles.bulkControls}>
           <h3>อัพเดทหลายคนพร้อมกัน ({selectedUsers.size} คน)</h3>
-          
+
           <div style={styles.bulkInputsContainer}>
             <div style={styles.bulkInputRow}>
               <div style={styles.bulkInputGroup}>
@@ -661,14 +746,14 @@ const LoanProcessManagement = () => {
                   onChange={(e) => setBulkStep(e.target.value)}
                   style={styles.select}
                 >
-                  {processSteps.map(step => (
+                  {processSteps.map((step) => (
                     <option key={step.id} value={step.id}>
                       {step.title}
                     </option>
                   ))}
                 </select>
               </div>
-              
+
               <div style={styles.bulkInputGroup}>
                 <label style={styles.label}>กำหนดสถานะ:</label>
                 <select
@@ -682,7 +767,7 @@ const LoanProcessManagement = () => {
                 </select>
               </div>
             </div>
-            
+
             <div style={styles.bulkNoteContainer}>
               <label style={styles.label}>หมายเหตุสำหรับทุกคน:</label>
               <textarea
@@ -693,7 +778,7 @@ const LoanProcessManagement = () => {
                 rows={2}
               />
             </div>
-            
+
             <div style={styles.bulkActionButtons}>
               <button
                 onClick={handleBulkUpdate}
@@ -720,22 +805,27 @@ const LoanProcessManagement = () => {
         {filteredSubmissions.map((submission) => {
           const user = users[submission.userId] || {};
           const userProcessStatus = processStatuses[submission.userId];
-          const currentStep = processSteps.find(s => s.id === userProcessStatus?.currentStep);
-          const overallStatus = userProcessStatus?.overallStatus || 'processing';
+          const currentStep = processSteps.find(
+            (s) => s.id === userProcessStatus?.currentStep
+          );
+          const overallStatus =
+            userProcessStatus?.overallStatus || "processing";
           const isSelected = selectedUsers.has(submission.userId);
 
           // Count step statuses
-          const completedSteps = Object.values(userProcessStatus?.steps || {})
-            .filter(step => step.status === 'completed').length;
-          const inProgressSteps = Object.values(userProcessStatus?.steps || {})
-            .filter(step => step.status === 'in_progress').length;
+          const completedSteps = Object.values(
+            userProcessStatus?.steps || {}
+          ).filter((step) => step.status === "completed").length;
+          const inProgressSteps = Object.values(
+            userProcessStatus?.steps || {}
+          ).filter((step) => step.status === "in_progress").length;
 
           return (
-            <div 
-              key={submission.id} 
+            <div
+              key={submission.id}
               style={{
                 ...styles.userCard,
-                ...(isSelected ? styles.userCardSelected : {})
+                ...(isSelected ? styles.userCardSelected : {}),
               }}
             >
               <div style={styles.userCardHeader}>
@@ -749,34 +839,68 @@ const LoanProcessManagement = () => {
                 </label>
                 <div style={styles.userHeader}>
                   <h3 style={styles.userName}>{user.name || "ไม่ระบุชื่อ"}</h3>
-                  <div style={{
-                    ...styles.statusBadge,
-                    backgroundColor: overallStatus === 'completed' ? '#28a745' : '#ffc107'
-                  }}>
-                    {overallStatusOptions[overallStatus] || 'กำลังดำเนินการ'}
+                  <div
+                    style={{
+                      ...styles.statusBadge,
+                      backgroundColor:
+                        overallStatus === "completed" ? "#28a745" : "#ffc107",
+                    }}
+                  >
+                    {overallStatusOptions[overallStatus] || "กำลังดำเนินการ"}
                   </div>
                 </div>
               </div>
 
               <div style={styles.userInfo}>
-                <p><strong>รหัสนักศึกษา:</strong> {submission.student_id}</p>
-                <p><strong>เลขประจำตัวประชาชน:</strong> {submission.citizen_id}</p>
-                <p><strong>ปีการศึกษา:</strong> {submission.academicYear}</p>
-                <p><strong>เทอม:</strong> {submission.submissionTerm}</p>
-                <p><strong>อีเมล:</strong> {submission.userEmail}</p>
-                <p><strong>วันที่ส่งเอกสาร:</strong> {new Date(submission.submittedAt).toLocaleDateString('th-TH')}</p>
-                <p><strong>ขั้นตอนปัจจุบัน:</strong> {currentStep?.title || 'รวบรวมเอกสาร'}</p>
+                <p>
+                  <strong>รหัสนักศึกษา:</strong> {submission.student_id}
+                </p>
+                <p>
+                  <strong>เลขประจำตัวประชาชน:</strong> {submission.citizen_id}
+                </p>
+                <p>
+                  <strong>ปีการศึกษา:</strong> {submission.academicYear}
+                </p>
+                <p>
+                  <strong>เทอม:</strong> {submission.submissionTerm}
+                </p>
+                <p>
+                  <strong>อีเมล:</strong> {submission.userEmail}
+                </p>
+                <p>
+                  <strong>วันที่ส่งเอกสาร:</strong>{" "}
+                  {new Date(submission.submittedAt).toLocaleDateString("th-TH")}
+                </p>
+                <p>
+                  <strong>ขั้นตอนปัจจุบัน:</strong>{" "}
+                  {currentStep?.title || "รวบรวมเอกสาร"}
+                </p>
               </div>
 
               <div style={styles.progressInfo}>
                 <div style={styles.progressRow}>
-                  <span style={{...styles.progressBadge, backgroundColor: '#28a745'}}>
+                  <span
+                    style={{
+                      ...styles.progressBadge,
+                      backgroundColor: "#28a745",
+                    }}
+                  >
                     เสร็จสิ้น: {completedSteps}
                   </span>
-                  <span style={{...styles.progressBadge, backgroundColor: '#ffc107'}}>
+                  <span
+                    style={{
+                      ...styles.progressBadge,
+                      backgroundColor: "#ffc107",
+                    }}
+                  >
                     กำลังดำเนินการ: {inProgressSteps}
                   </span>
-                  <span style={{...styles.progressBadge, backgroundColor: '#6c757d'}}>
+                  <span
+                    style={{
+                      ...styles.progressBadge,
+                      backgroundColor: "#6c757d",
+                    }}
+                  >
                     รอดำเนินการ: {3 - completedSteps - inProgressSteps}
                   </span>
                 </div>
@@ -784,13 +908,17 @@ const LoanProcessManagement = () => {
 
               {userProcessStatus?.lastUpdatedAt && (
                 <div style={styles.lastUpdateInfo}>
-                  อัพเดทล่าสุด: {new Date(userProcessStatus.lastUpdatedAt).toLocaleDateString('th-TH', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
+                  อัพเดทล่าสุด:{" "}
+                  {new Date(userProcessStatus.lastUpdatedAt).toLocaleDateString(
+                    "th-TH",
+                    {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }
+                  )}
                 </div>
               )}
 
@@ -807,7 +935,9 @@ const LoanProcessManagement = () => {
 
       {filteredSubmissions.length === 0 && (
         <div style={styles.noData}>
-          {searchTerm ? 'ไม่พบผู้กู้ที่ตรงกับการค้นหา' : 'ยังไม่มีผู้กู้ที่เอกสารอนุมัติครบถ้วน'}
+          {searchTerm
+            ? "ไม่พบผู้กู้ที่ตรงกับการค้นหา"
+            : "ยังไม่มีผู้กู้ที่เอกสารอนุมัติครบถ้วน"}
         </div>
       )}
 
@@ -901,7 +1031,7 @@ const styles = {
     fontWeight: "bold",
     color: "#28a745",
   },
-  
+
   // Bulk Selection Styles
   bulkSelectionContainer: {
     background: "#f8f9fa",
@@ -923,7 +1053,7 @@ const styles = {
     height: 16,
     cursor: "pointer",
   },
-  
+
   // Bulk Update Controls
   bulkControls: {
     background: "#e3f2fd",
@@ -972,7 +1102,7 @@ const styles = {
     borderRadius: 8,
     cursor: "pointer",
   },
-  
+
   loadingText: {
     fontSize: 18,
     color: "#666",

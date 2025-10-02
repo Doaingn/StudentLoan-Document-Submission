@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from "react";
 import { db } from "./database/firebase";
-import { 
-  collection, 
-  getDocs, 
-  doc, 
-  getDoc, 
-  Timestamp 
+import {
+  collection,
+  getDocs,
+  doc,
+  getDoc,
+  Timestamp,
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
-import { 
-  FaUsers, 
-  FaFileAlt, 
-  FaClock, 
-  FaTimesCircle, 
-  FaCheckCircle, 
-  FaChartLine, 
+import {
+  FaUsers,
+  FaFileAlt,
+  FaClock,
+  FaTimesCircle,
+  FaCheckCircle,
+  FaChartLine,
   FaMoneyBillWave,
   FaBell,
   FaClipboardList,
@@ -22,7 +22,7 @@ import {
   FaCalendarAlt,
   FaBook,
   FaSearch,
-  FaHistory
+  FaHistory,
 } from "react-icons/fa";
 import { RxRocket } from "react-icons/rx";
 
@@ -36,12 +36,12 @@ export default function EnhancedDashboard() {
     rejected: 0,
     inProcess: 0,
     processCompleted: 0,
-    systemStatus: 'ปิดใช้งาน',
-    recentActivities: []
+    systemStatus: "ปิดใช้งาน",
+    recentActivities: [],
   });
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [selectedPeriod, setSelectedPeriod] = useState('month');
+  const [selectedPeriod, setSelectedPeriod] = useState("month");
   const [systemConfig, setSystemConfig] = useState(null);
   const [userNames, setUserNames] = useState({});
 
@@ -81,19 +81,27 @@ export default function EnhancedDashboard() {
 
   const fetchAvailablePeriods = async () => {
     try {
-      const periodsRef = doc(db, "DocumentService", "submission_periods_history");
+      const periodsRef = doc(
+        db,
+        "DocumentService",
+        "submission_periods_history"
+      );
       const periodsDoc = await getDoc(periodsRef);
       if (periodsDoc.exists()) {
         const data = periodsDoc.data();
         return {
-          years: Array.isArray(data.availableYears) ? data.availableYears : ['2567'],
-          terms: Array.isArray(data.availableTerms) ? data.availableTerms : ['1', '2', '3'], 
+          years: Array.isArray(data.availableYears)
+            ? data.availableYears
+            : ["2567"],
+          terms: Array.isArray(data.availableTerms)
+            ? data.availableTerms
+            : ["1", "2", "3"],
         };
       }
-      return { years: ['2567'], terms: ['1', '2', '3'] }; 
+      return { years: ["2567"], terms: ["1", "2", "3"] };
     } catch (error) {
       console.error("Error fetching available periods:", error);
-      return { years: ['2567'], terms: ['1', '2', '3'] };
+      return { years: ["2567"], terms: ["1", "2", "3"] };
     }
   };
 
@@ -105,13 +113,13 @@ export default function EnhancedDashboard() {
           const userRef = doc(db, "users", userId);
           const userDoc = await getDoc(userRef);
           if (userDoc.exists()) {
-            names[userId] = userDoc.data().name || 'ไม่ระบุชื่อ';
+            names[userId] = userDoc.data().name || "ไม่ระบุชื่อ";
           } else {
-            names[userId] = 'ไม่พบข้อมูล';
+            names[userId] = "ไม่พบข้อมูล";
           }
         } catch (error) {
           console.error(`Error fetching user ${userId}:`, error);
-          names[userId] = 'ไม่สามารถดึงข้อมูล';
+          names[userId] = "ไม่สามารถดึงข้อมูล";
         }
       }
     }
@@ -122,7 +130,7 @@ export default function EnhancedDashboard() {
     const periodMap = {
       today: 1,
       week: 7,
-      month: 30
+      month: 30,
     };
     const daysBack = periodMap[periodFilter] || periodMap.month;
     const cutOffDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
@@ -141,33 +149,39 @@ export default function EnhancedDashboard() {
     for (const year of years) {
       for (const term of terms) {
         try {
-          const submissionsRef = collection(db, `document_submissions_${year}_${term}`);
+          const submissionsRef = collection(
+            db,
+            `document_submissions_${year}_${term}`
+          );
           const submissionsSnap = await getDocs(submissionsRef);
-          
+
           submissionsSnap.forEach((doc) => {
             const data = doc.data();
             const documentStatuses = data.documentStatuses || {};
-            
+
             if (Object.keys(documentStatuses).length > 0) {
               let submittedAt = data.submittedAt;
               if (submittedAt && submittedAt instanceof Timestamp) {
-                  submittedAt = submittedAt.toDate();
-              } else if (typeof submittedAt === 'string') {
-                  submittedAt = new Date(submittedAt);
+                submittedAt = submittedAt.toDate();
+              } else if (typeof submittedAt === "string") {
+                submittedAt = new Date(submittedAt);
               } else {
-                  submittedAt = new Date(0);
+                submittedAt = new Date(0);
               }
 
               if (submittedAt < cutOffDate) {
-                  return; 
+                return;
               }
 
               totalSubmissions++;
-              
-              const statuses = Object.values(documentStatuses).map(d => d.status);
-              const hasRejected = statuses.includes('rejected');
-              const hasPending = statuses.includes('pending');
-              const allApproved = statuses.length > 0 && statuses.every(s => s === 'approved');
+
+              const statuses = Object.values(documentStatuses).map(
+                (d) => d.status
+              );
+              const hasRejected = statuses.includes("rejected");
+              const hasPending = statuses.includes("pending");
+              const allApproved =
+                statuses.length > 0 && statuses.every((s) => s === "approved");
 
               if (hasRejected) {
                 rejected++;
@@ -181,38 +195,47 @@ export default function EnhancedDashboard() {
 
               allActivities.push({
                 id: doc.id,
-                userId: data.userId || 'ไม่ระบุชื่อ',
-                student_id: data.student_id || 'N/A',
+                userId: data.userId || "ไม่ระบุชื่อ",
+                student_id: data.student_id || "N/A",
                 academicYear: year,
                 term: term,
                 submittedAt: submittedAt,
-                documentStatuses: documentStatuses
+                documentStatuses: documentStatuses,
               });
             }
           });
         } catch (error) {
-          console.log(`Collection document_submissions_${year}_${term} not found (Skipping)`);
+          console.log(
+            `Collection document_submissions_${year}_${term} not found (Skipping)`
+          );
         }
 
         try {
-          const processRef = collection(db, `loan_process_status_${year}_${term}`);
+          const processRef = collection(
+            db,
+            `loan_process_status_${year}_${term}`
+          );
           const processSnap = await getDocs(processRef);
 
           processSnap.forEach((doc) => {
             const data = doc.data();
-            if (data.overallStatus === 'processing') {
+            if (data.overallStatus === "processing") {
               inProcess++;
-            } else if (data.overallStatus === 'completed') {
+            } else if (data.overallStatus === "completed") {
               processCompleted++;
             }
           });
         } catch (error) {
-          console.log(`Collection loan_process_status_${year}_${term} not found (Skipping)`);
+          console.log(
+            `Collection loan_process_status_${year}_${term} not found (Skipping)`
+          );
         }
       }
     }
-    
-    allActivities.sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+
+    allActivities.sort(
+      (a, b) => b.submittedAt.getTime() - a.submittedAt.getTime()
+    );
     const recentActivities = allActivities.slice(0, 15);
 
     return {
@@ -223,7 +246,7 @@ export default function EnhancedDashboard() {
       rejected,
       inProcess,
       processCompleted,
-      recentActivities
+      recentActivities,
     };
   };
 
@@ -234,10 +257,12 @@ export default function EnhancedDashboard() {
       setSystemConfig(config);
       const { years, terms } = await fetchAvailablePeriods();
       const data = await calculateStats(years, terms, selectedPeriod);
-      const uniqueUserIds = [...new Set(data.recentActivities.map(a => a.userId))];
+      const uniqueUserIds = [
+        ...new Set(data.recentActivities.map((a) => a.userId)),
+      ];
       const newUserNames = await fetchUserNames(uniqueUserIds);
-      setUserNames(prev => ({ ...prev, ...newUserNames }));
-      
+      setUserNames((prev) => ({ ...prev, ...newUserNames }));
+
       setStats({
         totalStudents: data.totalStudents,
         totalSubmissions: data.totalSubmissions,
@@ -246,11 +271,11 @@ export default function EnhancedDashboard() {
         rejected: data.rejected,
         inProcess: data.inProcess,
         processCompleted: data.processCompleted,
-        systemStatus: config.isEnabled ? 'เปิดใช้งาน' : 'ปิดใช้งาน',
-        recentActivities: data.recentActivities.map(activity => ({
-            ...activity,
-            submittedAt: activity.submittedAt.toISOString()
-        }))
+        systemStatus: config.isEnabled ? "เปิดใช้งาน" : "ปิดใช้งาน",
+        recentActivities: data.recentActivities.map((activity) => ({
+          ...activity,
+          submittedAt: activity.submittedAt.toISOString(),
+        })),
       });
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
@@ -270,22 +295,28 @@ export default function EnhancedDashboard() {
   };
 
   const getSubmissionRate = () => {
-    return stats.totalStudents > 0 ? Math.round((stats.totalSubmissions / stats.totalStudents) * 100) : 0;
+    return stats.totalStudents > 0
+      ? Math.round((stats.totalSubmissions / stats.totalStudents) * 100)
+      : 0;
   };
 
   const getPeriodLabel = () => {
-    switch(selectedPeriod) {
-      case 'today': return 'วันนี้';
-      case 'week': return 'สัปดาห์นี้';
-      case 'month': return 'เดือนนี้';
-      default: return 'เดือนนี้';
+    switch (selectedPeriod) {
+      case "today":
+        return "วันนี้";
+      case "week":
+        return "สัปดาห์นี้";
+      case "month":
+        return "เดือนนี้";
+      default:
+        return "เดือนนี้";
     }
   };
 
   const getStatusColor = (status) => {
-    if (status === 'เปิดใช้งาน') return '#10b981';
-    if (status === 'รอเปิดใช้งาน') return '#f59e0b';
-    return '#ef4444';
+    if (status === "เปิดใช้งาน") return "#10b981";
+    if (status === "รอเปิดใช้งาน") return "#f59e0b";
+    return "#ef4444";
   };
 
   const handleQuickAction = (action) => {
@@ -294,35 +325,39 @@ export default function EnhancedDashboard() {
 
   const handleViewSubmissionDetail = (activity) => {
     const path = `/document-submission?studentId=${activity.student_id}&year=${activity.academicYear}&term=${activity.term}`;
-    navigate(path); 
+    navigate(path);
   };
 
   const handleViewAllActivities = () => {
-    navigate('/document-submission');
+    navigate("/document-submission");
   };
 
   const formatDateTime = (isoString) => {
     const date = new Date(isoString);
-    if (isNaN(date)) return 'N/A';
-    return date.toLocaleString('th-TH', { 
-      day: 'numeric', 
-      month: 'short', 
-      year: 'numeric', 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    if (isNaN(date)) return "N/A";
+    return date.toLocaleString("th-TH", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
   const getDocumentStatusText = (documentStatuses) => {
-    const statuses = Object.values(documentStatuses).map(d => d.status);
-    const hasRejected = statuses.includes('rejected');
-    const hasPending = statuses.includes('pending');
-    const allApproved = statuses.length > 0 && statuses.every(s => s === 'approved');
+    const statuses = Object.values(documentStatuses).map((d) => d.status);
+    const hasRejected = statuses.includes("rejected");
+    const hasPending = statuses.includes("pending");
+    const allApproved =
+      statuses.length > 0 && statuses.every((s) => s === "approved");
 
-    if (hasRejected) return { text: 'เอกสารไม่ถูกต้อง', color: '#ef4444', bgColor: '#fee2e2' };
-    if (allApproved) return { text: 'เอกสารถูกต้อง', color: '#10b981', bgColor: '#d1fae5' };
-    if (hasPending) return { text: 'รอการตรวจสอบ', color: '#f59e0b', bgColor: '#fef3c7' };
-    return { text: 'ส่งแล้ว (รอนับ)', color: '#6b7280', bgColor: '#f3f4f6' };
+    if (hasRejected)
+      return { text: "เอกสารไม่ถูกต้อง", color: "#ef4444", bgColor: "#fee2e2" };
+    if (allApproved)
+      return { text: "เอกสารถูกต้อง", color: "#10b981", bgColor: "#d1fae5" };
+    if (hasPending)
+      return { text: "รอการตรวจสอบ", color: "#f59e0b", bgColor: "#fef3c7" };
+    return { text: "ส่งแล้ว (รอนับ)", color: "#6b7280", bgColor: "#f3f4f6" };
   };
 
   const styles = {
@@ -765,24 +800,46 @@ export default function EnhancedDashboard() {
               </div>
             </div>
             <div style={styles.periodSelector}>
-              <button 
-                className={selectedPeriod === 'today' ? 'active period-btn' : 'period-btn'}
-                style={selectedPeriod === 'today' ? styles.periodButtonActive : styles.periodButton}
-                onClick={() => setSelectedPeriod('today')}
+              <button
+                className={
+                  selectedPeriod === "today"
+                    ? "active period-btn"
+                    : "period-btn"
+                }
+                style={
+                  selectedPeriod === "today"
+                    ? styles.periodButtonActive
+                    : styles.periodButton
+                }
+                onClick={() => setSelectedPeriod("today")}
               >
                 วันนี้
               </button>
-              <button 
-                className={selectedPeriod === 'week' ? 'active period-btn' : 'period-btn'}
-                style={selectedPeriod === 'week' ? styles.periodButtonActive : styles.periodButton}
-                onClick={() => setSelectedPeriod('week')}
+              <button
+                className={
+                  selectedPeriod === "week" ? "active period-btn" : "period-btn"
+                }
+                style={
+                  selectedPeriod === "week"
+                    ? styles.periodButtonActive
+                    : styles.periodButton
+                }
+                onClick={() => setSelectedPeriod("week")}
               >
                 สัปดาห์นี้
               </button>
-              <button 
-                className={selectedPeriod === 'month' ? 'active period-btn' : 'period-btn'}
-                style={selectedPeriod === 'month' ? styles.periodButtonActive : styles.periodButton}
-                onClick={() => setSelectedPeriod('month')}
+              <button
+                className={
+                  selectedPeriod === "month"
+                    ? "active period-btn"
+                    : "period-btn"
+                }
+                style={
+                  selectedPeriod === "month"
+                    ? styles.periodButtonActive
+                    : styles.periodButton
+                }
+                onClick={() => setSelectedPeriod("month")}
               >
                 เดือนนี้
               </button>
@@ -791,15 +848,23 @@ export default function EnhancedDashboard() {
           {systemConfig && (
             <div style={styles.systemInfo}>
               <div style={styles.infoItem}>
-                <span style={styles.infoLabel}><FaCalendarAlt /> ปีการศึกษา:</span>
-                <span style={styles.infoValue}>{systemConfig.academicYear}</span>
+                <span style={styles.infoLabel}>
+                  <FaCalendarAlt /> ปีการศึกษา:
+                </span>
+                <span style={styles.infoValue}>
+                  {systemConfig.academicYear}
+                </span>
               </div>
               <div style={styles.infoItem}>
-                <span style={styles.infoLabel}><FaBook /> เทอม:</span>
+                <span style={styles.infoLabel}>
+                  <FaBook /> เทอม:
+                </span>
                 <span style={styles.infoValue}>{systemConfig.term}</span>
               </div>
               <div style={styles.infoItem}>
-                <span style={styles.infoLabel}><FaClock /> ช่วงเวลา:</span>
+                <span style={styles.infoLabel}>
+                  <FaClock /> ช่วงเวลา:
+                </span>
                 <span style={styles.infoValue}>{getPeriodLabel()}</span>
               </div>
             </div>
@@ -807,67 +872,97 @@ export default function EnhancedDashboard() {
         </div>
 
         <div style={styles.statsGrid}>
-          <div 
+          <div
             className="stat-card"
             style={styles.statCard()}
-            onClick={() => handleQuickAction('studentinfo')}
+            onClick={() => handleQuickAction("studentinfo")}
           >
             <div style={styles.statCardInner}>
-              <div style={styles.statIcon}><FaUsers /></div>
+              <div style={styles.statIcon}>
+                <FaUsers />
+              </div>
               <div style={styles.statTitle}>จำนวนนักศึกษาทั้งหมด</div>
-              <div style={styles.statValue}>{stats.totalStudents.toLocaleString()}</div>
-              <div style={styles.statSubtext}>อัตราการส่งเอกสาร: {getSubmissionRate()}%</div>
+              <div style={styles.statValue}>
+                {stats.totalStudents.toLocaleString()}
+              </div>
+              <div style={styles.statSubtext}>
+                อัตราการส่งเอกสาร: {getSubmissionRate()}%
+              </div>
             </div>
           </div>
 
-          <div 
+          <div
             className="stat-card"
             style={styles.statCard()}
-            onClick={() => handleQuickAction('document-submission')}
+            onClick={() => handleQuickAction("document-submission")}
           >
             <div style={styles.statCardInner}>
-              <div style={styles.statIcon}><FaFileAlt color="#13cdcaff"/></div>
-              <div style={styles.statTitle}>การส่งเอกสารรวม ({getPeriodLabel()})</div>
-              <div style={styles.statValue}>{stats.totalSubmissions.toLocaleString()}</div>
+              <div style={styles.statIcon}>
+                <FaFileAlt color="#13cdcaff" />
+              </div>
+              <div style={styles.statTitle}>
+                การส่งเอกสารรวม ({getPeriodLabel()})
+              </div>
+              <div style={styles.statValue}>
+                {stats.totalSubmissions.toLocaleString()}
+              </div>
               <div style={styles.statSubtext}>ทั้งหมดที่นับได้</div>
             </div>
           </div>
 
-          <div 
+          <div
             className="stat-card"
             style={styles.statCard()}
-            onClick={() => handleQuickAction('document-submission')}
+            onClick={() => handleQuickAction("document-submission")}
           >
             <div style={styles.statCardInner}>
-              <div style={styles.statIcon}><FaClock color="#ffa726"/></div>
-              <div style={styles.statTitle}>รอการตรวจสอบ ({getPeriodLabel()})</div>
-              <div style={styles.statValue}>{stats.pendingReview.toLocaleString()}</div>
+              <div style={styles.statIcon}>
+                <FaClock color="#ffa726" />
+              </div>
+              <div style={styles.statTitle}>
+                รอการตรวจสอบ ({getPeriodLabel()})
+              </div>
+              <div style={styles.statValue}>
+                {stats.pendingReview.toLocaleString()}
+              </div>
               <div style={styles.statSubtext}>ต้องดำเนินการด่วน</div>
             </div>
           </div>
 
-          <div 
+          <div
             className="stat-card"
             style={styles.statCard()}
-            onClick={() => handleQuickAction('document-submission')}
+            onClick={() => handleQuickAction("document-submission")}
           >
             <div style={styles.statCardInner}>
-              <div style={styles.statIcon}><FaTimesCircle color="#ef4444"/></div>
-              <div style={styles.statTitle}>เอกสารไม่ถูกต้อง ({getPeriodLabel()})</div>
-              <div style={styles.statValue}>{stats.rejected.toLocaleString()}</div>
+              <div style={styles.statIcon}>
+                <FaTimesCircle color="#ef4444" />
+              </div>
+              <div style={styles.statTitle}>
+                เอกสารไม่ถูกต้อง ({getPeriodLabel()})
+              </div>
+              <div style={styles.statValue}>
+                {stats.rejected.toLocaleString()}
+              </div>
               <div style={styles.statSubtext}>รอการแก้ไข</div>
             </div>
           </div>
 
-          <div 
+          <div
             className="stat-card"
             style={styles.statCard()}
-            onClick={() => handleQuickAction('loan-process')}
+            onClick={() => handleQuickAction("loan-process")}
           >
             <div style={styles.statCardInner}>
-              <div style={styles.statIcon}><FaCheckCircle color="#10b981"/></div>
-              <div style={styles.statTitle}>เอกสารถูกต้อง/อนุมัติ ({getPeriodLabel()})</div>
-              <div style={styles.statValue}>{stats.approved.toLocaleString()}</div>
+              <div style={styles.statIcon}>
+                <FaCheckCircle color="#10b981" />
+              </div>
+              <div style={styles.statTitle}>
+                เอกสารถูกต้อง/อนุมัติ ({getPeriodLabel()})
+              </div>
+              <div style={styles.statValue}>
+                {stats.approved.toLocaleString()}
+              </div>
               <div style={styles.statSubtext}>พร้อมเตรียมจัดส่งให้ธนาคาร</div>
             </div>
           </div>
@@ -875,22 +970,38 @@ export default function EnhancedDashboard() {
 
         <div style={styles.progressSection}>
           <div style={styles.progressCard}>
-            <div style={styles.progressTitle}><FaChartLine color="#00ef2cff"/> อัตราการตรวจสอบเอกสาร</div>
+            <div style={styles.progressTitle}>
+              <FaChartLine color="#00ef2cff" /> อัตราการตรวจสอบเอกสาร
+            </div>
             <div style={styles.progressBarContainer}>
-              <div style={styles.progressBar(calculateCompletionRate(), "linear-gradient(90deg, #667eea 0%, #764ba2 100%)")}></div>
+              <div
+                style={styles.progressBar(
+                  calculateCompletionRate(),
+                  "linear-gradient(90deg, #667eea 0%, #764ba2 100%)"
+                )}
+              ></div>
             </div>
             <div style={styles.progressText}>
-              {calculateCompletionRate()}% - อนุมัติแล้ว {stats.approved} จาก {stats.approved + stats.rejected + stats.pendingReview} รายการ
+              {calculateCompletionRate()}% - อนุมัติแล้ว {stats.approved} จาก{" "}
+              {stats.approved + stats.rejected + stats.pendingReview} รายการ
             </div>
           </div>
 
           <div style={styles.progressCard}>
-            <div style={styles.progressTitle}><FaMoneyBillWave /> สถานะการดำเนินการกู้ยืม</div>
+            <div style={styles.progressTitle}>
+              <FaMoneyBillWave /> สถานะการดำเนินการกู้ยืม
+            </div>
             <div style={styles.progressBarContainer}>
-              <div style={styles.progressBar(getProcessingRate(), "linear-gradient(90deg, #f093fb 0%, #f5576c 100%)")}></div>
+              <div
+                style={styles.progressBar(
+                  getProcessingRate(),
+                  "linear-gradient(90deg, #f093fb 0%, #f5576c 100%)"
+                )}
+              ></div>
             </div>
             <div style={styles.progressText}>
-              {getProcessingRate()}% - เสร็จสิ้น {stats.processCompleted} จาก {stats.inProcess + stats.processCompleted} รายการ
+              {getProcessingRate()}% - เสร็จสิ้น {stats.processCompleted} จาก{" "}
+              {stats.inProcess + stats.processCompleted} รายการ
             </div>
           </div>
         </div>
@@ -898,10 +1009,12 @@ export default function EnhancedDashboard() {
         <div className="main-content" style={styles.mainContent}>
           <div style={styles.activitiesCard}>
             <div style={styles.activitiesHeader}>
-              <h3 style={styles.activitiesTitle}><FaBell color="#ffd500ff"/> กิจกรรมล่าสุด ({getPeriodLabel()})</h3>
-              <button 
+              <h3 style={styles.activitiesTitle}>
+                <FaBell color="#ffd500ff" /> กิจกรรมล่าสุด ({getPeriodLabel()})
+              </h3>
+              <button
                 className="view-all"
-                style={styles.viewAllButton} 
+                style={styles.viewAllButton}
                 onClick={handleViewAllActivities}
               >
                 ดูทั้งหมด →
@@ -910,69 +1023,128 @@ export default function EnhancedDashboard() {
             <div style={styles.activityList}>
               {stats.recentActivities.length > 0 ? (
                 stats.recentActivities.map((activity) => {
-                  const statusInfo = getDocumentStatusText(activity.documentStatuses);
+                  const statusInfo = getDocumentStatusText(
+                    activity.documentStatuses
+                  );
                   return (
-                    <div 
-                      key={activity.id} 
+                    <div
+                      key={activity.id}
                       className="activity-item"
                       style={styles.activityItem}
                       onClick={() => handleViewSubmissionDetail(activity)}
                     >
-                      <div style={styles.activityIcon}><FaClipboardList /></div>
+                      <div style={styles.activityIcon}>
+                        <FaClipboardList />
+                      </div>
                       <div style={styles.activityContent}>
                         <div style={styles.activityName}>
-                          {activity.student_id} {userNames[activity.userId] || 'กำลังโหลด...'}
+                          {activity.student_id}{" "}
+                          {userNames[activity.userId] || "กำลังโหลด..."}
                         </div>
                         <div style={styles.activityDetail}>
-                          ส่งเอกสาร กยศ. ปี {activity.academicYear} เทอม {activity.term}
+                          ส่งเอกสาร กยศ. ปี {activity.academicYear} เทอม{" "}
+                          {activity.term}
                         </div>
                         <div style={styles.activityTime}>
                           <FaClock /> {formatDateTime(activity.submittedAt)}
                         </div>
                       </div>
-                      <div style={styles.activityBadge(statusInfo.bgColor, statusInfo.color)}>
+                      <div
+                        style={styles.activityBadge(
+                          statusInfo.bgColor,
+                          statusInfo.color
+                        )}
+                      >
                         {statusInfo.text}
                       </div>
                     </div>
                   );
                 })
               ) : (
-                <div style={{ textAlign: "center", padding: "3rem", color: "#94a3b8" }}>
-                  <div style={{ fontSize: "3rem", marginBottom: "1rem" }}><FaSearch /></div>
-                  <div style={{ fontSize: "1.1rem", fontWeight: "600" }}>ไม่มีกิจกรรมในช่วงเวลานี้</div>
+                <div
+                  style={{
+                    textAlign: "center",
+                    padding: "3rem",
+                    color: "#94a3b8",
+                  }}
+                >
+                  <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>
+                    <FaSearch />
+                  </div>
+                  <div style={{ fontSize: "1.1rem", fontWeight: "600" }}>
+                    ไม่มีกิจกรรมในช่วงเวลานี้
+                  </div>
                 </div>
               )}
             </div>
           </div>
 
           <div style={styles.quickActionsCard}>
-            <h3 style={styles.quickActionsTitle}><RxRocket color="#ff0000ff"/> ดำเนินการด่วน</h3>
+            <h3 style={styles.quickActionsTitle}>
+              <RxRocket color="#ff0000ff" /> ดำเนินการด่วน
+            </h3>
             <div style={styles.actionButtons}>
-              <button 
+              <button
                 className="action-btn"
-                style={styles.actionButton("linear-gradient(135deg, #667eea 0%, #764ba2 100%)")}
-                onClick={() => handleQuickAction('document-submission')}
+                style={styles.actionButton(
+                  "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+                )}
+                onClick={() => handleQuickAction("document-submission")}
               >
-                <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><FaFileAlt /> ตรวจสอบเอกสาร</span>
-                <span style={styles.actionCount}>{stats.pendingReview.toLocaleString()}</span>
+                <span
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                  }}
+                >
+                  <FaFileAlt /> ตรวจสอบเอกสาร
+                </span>
+                <span style={styles.actionCount}>
+                  {stats.pendingReview.toLocaleString()}
+                </span>
               </button>
 
-              <button 
+              <button
                 className="action-btn"
-                style={styles.actionButton("linear-gradient(135deg, #f093fb 0%, #f5576c 100%)")}
-                onClick={() => handleQuickAction('loan-process')}
+                style={styles.actionButton(
+                  "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)"
+                )}
+                onClick={() => handleQuickAction("loan-process")}
               >
-                <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><FaMoneyBillWave /> จัดการสถานะการดำเนินการ</span>
-                <span style={styles.actionCount}>{stats.inProcess.toLocaleString()}</span>
+                <span
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                  }}
+                >
+                  <FaMoneyBillWave /> จัดการสถานะการดำเนินการ
+                </span>
+                <span style={styles.actionCount}>
+                  {stats.inProcess.toLocaleString()}
+                </span>
               </button>
 
-              <button 
+              <button
                 className="action-btn"
-                style={styles.actionButton("linear-gradient(135deg, #ffee80ff 0%, #ffd815ff 100%)")}
-                onClick={() => handleQuickAction('studentinfo')}
+                style={styles.actionButton(
+                  "linear-gradient(135deg, #ffee80ff 0%, #ffd815ff 100%)"
+                )}
+                onClick={() => handleQuickAction("studentinfo")}
               >
-                <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><FaUsers /> ดูข้อมูลนักศึกษา</span>
-                <span style={styles.actionCount}>{stats.totalStudents.toLocaleString()}</span>
+                <span
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                  }}
+                >
+                  <FaUsers /> ดูข้อมูลนักศึกษา
+                </span>
+                <span style={styles.actionCount}>
+                  {stats.totalStudents.toLocaleString()}
+                </span>
               </button>
             </div>
           </div>
