@@ -893,7 +893,12 @@ const DocumentStatusScreen = ({ route, navigation }) => {
               });
               
               Alert.alert("ลบสำเร็จ", "คุณสามารถทำรายการใหม่ได้แล้ว");
-              navigation.reset({ index: 0, routes: [{ name: "MainTabs" }] });
+              if (navigation && navigation.navigate) {
+                  navigation.navigate("MainTabs");
+              } else {
+                  // กรณีฉุกเฉิน
+                  console.warn("Cannot navigate to MainTabs. Navigation prop error.");
+              }
               
             } catch (error) {
               console.error("Error deleting submission:", error);
@@ -905,11 +910,6 @@ const DocumentStatusScreen = ({ route, navigation }) => {
         }
       ]
     );
-  };
-
-  // ฟังก์ชันนำทางกลับหน้าหลัก
-  const handleGoHome = () => {
-    navigation.reset({ index: 0, routes: [{ name: "MainTabs" }] });
   };
 
   // ฟังก์ชันแสดงรายการเอกสารที่อัพโหลด
