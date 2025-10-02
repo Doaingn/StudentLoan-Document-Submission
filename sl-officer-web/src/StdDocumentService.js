@@ -1,3 +1,4 @@
+// StdDocumentService.js
 import React, { useState, useEffect, useCallback } from "react";
 import { db } from "./database/firebase";
 import {
@@ -6,8 +7,21 @@ import {
   setDoc,
   updateDoc,
   serverTimestamp,
-  arrayUnion
+  arrayUnion,
 } from "firebase/firestore";
+import {
+  FaCog,
+  FaCalendarAlt,
+  FaClock,
+  FaPowerOff,
+  FaSave,
+  FaToggleOn,
+  FaToggleOff,
+  FaExclamationTriangle,
+  FaCheckCircle,
+  FaTimesCircle,
+  FaHistory,
+} from "react-icons/fa";
 
 // Document สำหรับเก็บประวัติปีการศึกษาและเทอมที่เคยมีการตั้งค่า
 const PERIODS_HISTORY_PATH = ["DocumentService", "submission_periods_history"];
@@ -17,15 +31,18 @@ const logAcademicPeriod = async (year, term) => {
     const [collectionName, docId] = PERIODS_HISTORY_PATH;
     const periodsRef = doc(db, collectionName, docId);
 
-    await setDoc(periodsRef, { 
-      availableYears: arrayUnion(year.toString()),
-      availableTerms: arrayUnion(term.toString()),
-    }, { merge: true }); // merge: true จะยังคง Array เดิมไว้และเพิ่มค่าใหม่เข้าไป
+    await setDoc(
+      periodsRef,
+      {
+        availableYears: arrayUnion(year.toString()),
+        availableTerms: arrayUnion(term.toString()),
+      },
+      { merge: true }
+    );
 
     console.log(`Period ${year}/${term} logged to history successfully.`);
   } catch (error) {
-    // บันทึก Error เพื่อตรวจสอบใน Console
-    console.error("Error logging academic period (History):", error); 
+    console.error("Error logging academic period (History):", error);
   }
 };
 
@@ -44,142 +61,301 @@ const StdDocumentService = () => {
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState("");
 
-  // สร้าง styles object
+  // สร้าง styles object ที่กะทัดรัดกว่า
   const styles = {
     container: {
-      padding: 20,
-      fontFamily: "Arial, sans-serif",
-      backgroundColor: "#f8f9fa",
       minHeight: "100vh",
+      padding: "1.5rem",
+      fontFamily: "'Kanit', sans-serif",
+    },
+    innerContainer: {
+      maxWidth: "1000px",
+      margin: "0 auto",
+    },
+    card: {
+      background: "rgba(255, 255, 255, 0.95)",
+      backdropFilter: "blur(10px)",
+      borderRadius: "16px",
+      padding: "1.5rem",
+      marginBottom: "1.5rem",
+      boxShadow: "0 8px 32px rgba(0, 0, 0, 0.1)",
     },
     header: {
       display: "flex",
       justifyContent: "space-between",
       alignItems: "center",
-      marginBottom: 20,
+      marginBottom: "1.5rem",
       flexWrap: "wrap",
-      gap: "15px",
+      gap: "1rem",
     },
-    title: {
-      color: "#333",
-      margin: 0,
-      marginBottom: 5,
-      fontSize: 24,
-      fontWeight: "bold",
-    },
-    currentTime: {
-      color: "#666",
-      fontSize: 14,
-      marginBottom: 5,
-    },
-    systemStatus: {
-      color: "#333",
-      fontSize: 16,
-      fontWeight: "bold",
-      marginBottom: 20,
-    },
-    systemToggleButton: {
-      color: "white",
-      border: "none",
-      padding: "12px 24px",
-      borderRadius: 8,
-      cursor: "pointer",
-      fontSize: 16,
-      fontWeight: "bold",
+    titleSection: {
       display: "flex",
       alignItems: "center",
-      gap: "8px",
+      gap: "0.8rem",
+    },
+    title: {
+      color: "#1e293b",
+      margin: 0,
+      fontSize: "1.8rem",
+      fontWeight: "700",
+    },
+    titleIcon: {
+      fontSize: "2rem",
+      color: "#667eea",
+    },
+    currentTime: {
+      color: "#64748b",
+      fontSize: "0.9rem",
+      fontWeight: "500",
+      display: "flex",
+      alignItems: "center",
+      gap: "0.4rem",
+    },
+    systemStatusSection: {
+      display: "flex",
+      alignItems: "center",
+      gap: "0.8rem",
+      marginBottom: "1.5rem",
+      padding: "1rem",
+      background: "#f8fafc",
+      borderRadius: "12px",
+    },
+    systemStatusLabel: {
+      fontSize: "1rem",
+      fontWeight: "600",
+      color: "#374151",
+    },
+    statusBadge: {
+      padding: "0.5rem 1rem",
+      borderRadius: "20px",
+      fontSize: "0.85rem",
+      fontWeight: "600",
+      display: "flex",
+      alignItems: "center",
+      gap: "0.4rem",
+      boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+    },
+    systemToggleButton: {
+      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+      color: "white",
+      border: "none",
+      padding: "0.8rem 1.5rem",
+      borderRadius: "10px",
+      cursor: "pointer",
+      fontSize: "0.9rem",
+      fontWeight: "600",
+      display: "flex",
+      alignItems: "center",
+      gap: "0.5rem",
       transition: "all 0.3s ease",
-      boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-      marginBottom: 20,
+      boxShadow: "0 3px 10px rgba(102, 126, 234, 0.3)",
+      marginBottom: "1.5rem",
+    },
+    dangerButton: {
+      background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)",
+      color: "white",
+      border: "none",
+      padding: "0.8rem 1.5rem",
+      borderRadius: "10px",
+      cursor: "pointer",
+      fontSize: "0.9rem",
+      fontWeight: "600",
+      display: "flex",
+      alignItems: "center",
+      gap: "0.5rem",
+      transition: "all 0.3s ease",
+      boxShadow: "0 3px 10px rgba(239, 68, 68, 0.3)",
+      marginBottom: "1.5rem",
     },
     section: {
-      marginBottom: 25,
-      padding: 15,
-      backgroundColor: "#ffffff",
-      borderRadius: 8,
-      border: "1px solid #e9ecef",
-      boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
+      marginBottom: "1.5rem",
     },
     sectionTitle: {
+      display: "flex",
+      alignItems: "center",
+      gap: "0.6rem",
       marginTop: 0,
-      marginBottom: 15,
-      color: "#495057",
-      fontSize: 18,
-      fontWeight: "bold",
+      marginBottom: "1rem",
+      color: "#1e293b",
+      fontSize: "1.2rem",
+      fontWeight: "600",
+    },
+    sectionIcon: {
+      color: "#667eea",
+      fontSize: "1.3rem",
     },
     formRow: {
-      display: "flex",
-      gap: 15,
-      marginBottom: 15,
-      flexWrap: "wrap",
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+      gap: "1rem",
+      marginBottom: "1rem",
     },
     field: {
-      flex: 1,
-      marginBottom: 15,
-      minWidth: 250,
+      marginBottom: "1rem",
     },
     label: {
-      display: "block",
-      marginBottom: 8,
-      fontWeight: "bold",
-      color: "#333",
+      display: "flex",
+      alignItems: "center",
+      gap: "0.4rem",
+      marginBottom: "0.5rem",
+      fontWeight: "500",
+      color: "#374151",
+      fontSize: "0.9rem",
+    },
+    labelIcon: {
+      color: "#667eea",
+      fontSize: "0.8rem",
     },
     input: {
       width: "100%",
-      padding: 12,
-      border: "2px solid #ddd",
-      borderRadius: 8,
-      fontSize: 14,
-      transition: "border-color 0.3s ease",
-      boxSizing: "border-box",
+      padding: "0.7rem 0.9rem",
+      borderRadius: "8px",
+      border: "2px solid #e2e8f0",
+      fontSize: "0.85rem",
+      fontWeight: "400",
+      transition: "all 0.3s ease",
+      background: "white",
     },
     saveButton: {
-      backgroundColor: "#007bff",
+      background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
       color: "white",
       border: "none",
-      padding: "12px 24px",
-      borderRadius: 8,
+      padding: "0.8rem 1.8rem",
+      borderRadius: "10px",
       cursor: "pointer",
-      fontSize: 16,
-      fontWeight: "bold",
-      boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+      fontSize: "0.9rem",
+      fontWeight: "600",
+      display: "flex",
+      alignItems: "center",
+      gap: "0.5rem",
       transition: "all 0.3s ease",
+      boxShadow: "0 3px 10px rgba(16, 185, 129, 0.3)",
+      marginTop: "0.5rem",
     },
     toggleContainer: {
       display: "flex",
       alignItems: "center",
-      gap: 10,
-      marginBottom: 15,
+      gap: "0.8rem",
+      marginBottom: "1rem",
+      padding: "0.8rem",
+      backgroundColor: "white",
+      borderRadius: "8px",
+      border: "2px solid #e2e8f0",
     },
     switchLabel: {
-      fontSize: 16,
-      fontWeight: "bold",
-      color: "#333",
+      fontSize: "0.9rem",
+      fontWeight: "500",
+      color: "#374151",
       display: "flex",
       alignItems: "center",
-      gap: 8,
+      gap: "0.8rem",
       cursor: "pointer",
+      flex: 1,
     },
-    statusIndicator: {
-      padding: "8px 16px",
-      borderRadius: 20,
-      fontSize: 14,
-      fontWeight: "bold",
-      display: "inline-block",
-      marginLeft: 10,
-    },
-    loading: {
-      fontSize: 18,
-      color: "#666",
-      textAlign: "center",
-      marginTop: 50,
+    toggleIcon: {
+      fontSize: "1.2rem",
+      color: "#667eea",
     },
     checkbox: {
+      width: "16px",
+      height: "16px",
       margin: 0,
-      transform: "scale(1.2)",
+      cursor: "pointer",
+    },
+    disabledSection: {
+      opacity: 0.6,
+      pointerEvents: "none",
+    },
+    noteText: {
+      fontSize: "0.8rem",
+      color: "#64748b",
+      fontStyle: "italic",
+      marginTop: "0.5rem",
+      display: "flex",
+      alignItems: "center",
+      gap: "0.4rem",
+    },
+    lastUpdated: {
+      textAlign: "center",
+      fontSize: "0.8rem",
+      color: "#64748b",
+      marginTop: "1rem",
+      padding: "0.8rem",
+      backgroundColor: "#f1f5f9",
+      borderRadius: "8px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "0.4rem",
+    },
+    loadingContainer: {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: "40vh",
+    },
+    spinner: {
+      width: "40px",
+      height: "40px",
+      border: "4px solid #f3f3f3",
+      borderTop: "4px solid #667eea",
+      borderRadius: "50%",
+      animation: "spin 1s linear infinite",
+      marginBottom: "1rem",
+    },
+    loadingText: {
+      fontSize: "1rem",
+      color: "#64748b",
+      fontWeight: "500",
     },
   };
+
+  // เพิ่ม CSS animation
+  const spinnerStyle = `
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .toggle-container:hover {
+      border-color: #667eea;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+    }
+    
+    .save-btn:hover, .toggle-btn:hover, .danger-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    }
+    
+    @media (max-width: 768px) {
+      .form-row {
+        grid-template-columns: 1fr !important;
+      }
+      
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      
+      .system-status-section {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      .container {
+        padding: 1rem !important;
+      }
+      
+      .card {
+        padding: 1rem !important;
+      }
+    }
+  `;
 
   // อัพเดทเวลาปัจจุบันทุกวินาที
   useEffect(() => {
@@ -329,28 +505,33 @@ const StdDocumentService = () => {
       // 1. การทำงานเดิม: บันทึกการตั้งค่าปัจจุบัน
       const docRef = doc(db, "DocumentService", "config");
       const configToSave = {
-        ...config, 
+        ...config,
         lastUpdated: serverTimestamp(),
       };
 
       await updateDoc(docRef, configToSave);
-      
+
       // 2. การทำงานใหม่: บันทึกปีการศึกษาและเทอมลงในทะเบียนประวัติ
       // ตรวจสอบว่ามีข้อมูลปีและเทอมก่อนบันทึก
       if (configToSave.academicYear && configToSave.term) {
-          await logAcademicPeriod(configToSave.academicYear, configToSave.term);
+        await logAcademicPeriod(configToSave.academicYear, configToSave.term);
       }
-      
+
       alert("บันทึกการตั้งค่าเรียบร้อย");
     } catch (error) {
       console.error("Error saving config:", error);
       alert("ข้อผิดพลาด: ไม่สามารถบันทึกข้อมูลได้");
     }
-};
+  };
 
   const getSystemStatus = () => {
     if (!config.isEnabled) {
-      return { status: "ปิดใช้งาน", color: "#dc3545", bgColor: "#f8d7da" };
+      return {
+        status: "ปิดใช้งาน",
+        color: "#dc3545",
+        bgColor: "#f8d7da",
+        icon: <FaTimesCircle />,
+      };
     }
 
     if (config.immediateAccess) {
@@ -358,6 +539,7 @@ const StdDocumentService = () => {
         status: "เปิดใช้งาน (ทันที)",
         color: "#28a745",
         bgColor: "#d4edda",
+        icon: <FaCheckCircle />,
       };
     }
 
@@ -371,22 +553,41 @@ const StdDocumentService = () => {
     const endDateTime = new Date(`${config.endDate}T${config.endTime}:00`);
 
     if (bangkokTime < startDateTime) {
-      return { status: "รอเปิดใช้งาน", color: "#ffc107", bgColor: "#fff3cd" };
+      return {
+        status: "รอเปิดใช้งาน",
+        color: "#ffc107",
+        bgColor: "#fff3cd",
+        icon: <FaExclamationTriangle />,
+      };
     } else if (bangkokTime >= startDateTime && bangkokTime <= endDateTime) {
       return {
         status: "เปิดใช้งาน (ตามเวลา)",
         color: "#28a745",
         bgColor: "#d4edda",
+        icon: <FaCheckCircle />,
       };
     } else {
-      return { status: "หมดเวลาใช้งาน", color: "#dc3545", bgColor: "#f8d7da" };
+      return {
+        status: "หมดเวลาใช้งาน",
+        color: "#dc3545",
+        bgColor: "#f8d7da",
+        icon: <FaTimesCircle />,
+      };
     }
   };
 
   if (loading) {
     return (
       <div style={styles.container}>
-        <div style={styles.loading}>กำลังโหลดข้อมูล...</div>
+        <style>{spinnerStyle}</style>
+        <div style={styles.innerContainer}>
+          <div style={styles.card}>
+            <div style={styles.loadingContainer}>
+              <div style={styles.spinner}></div>
+              <div style={styles.loadingText}>กำลังโหลดข้อมูล...</div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -395,214 +596,265 @@ const StdDocumentService = () => {
 
   return (
     <div style={styles.container}>
-      {/* Header */}
-      <div style={styles.header}>
-        <div>
-          <h1 style={styles.title}>จัดการระบบเอกสารนักศึกษา</h1>
-          <div style={styles.currentTime}>เวลาปัจจุบัน: {currentTime}</div>
-        </div>
-      </div>
+      <style>{spinnerStyle}</style>
 
-      {/* System Status */}
-      <div style={styles.systemStatus}>
-        สถานะระบบ:
-        <span
-          style={{
-            ...styles.statusIndicator,
-            color: systemStatus.color,
-            backgroundColor: systemStatus.bgColor,
-          }}
-        >
-          {systemStatus.status}
-        </span>
-      </div>
-
-      {/* Quick Toggle */}
-      <button
-        style={{
-          ...styles.systemToggleButton,
-          backgroundColor: config.isEnabled ? "#dc3545" : "#28a745",
-        }}
-        onClick={() => handleToggleSystem(!config.isEnabled)}
-      >
-        {config.isEnabled ? "ปิดระบบทันที" : " เปิดระบบทันที"}
-      </button>
-
-      {/* Basic Settings */}
-      <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>ข้อมูลพื้นฐาน</h3>
-        <div style={styles.formRow}>
-          <div style={styles.field}>
-            <label style={styles.label}>ปีการศึกษา</label>
-            <input
-              style={styles.input}
-              type="text"
-              value={config.academicYear}
-              onChange={(e) =>
-                setConfig({ ...config, academicYear: e.target.value })
-              }
-              placeholder="เช่น 2567"
-            />
+      <div style={styles.innerContainer}>
+        {/* Header Card */}
+        <div style={styles.card}>
+          <div style={styles.header}>
+            <div style={styles.titleSection}>
+              <FaCog style={styles.titleIcon} />
+              <h1 style={styles.title}>จัดการระบบเอกสารนักศึกษา</h1>
+            </div>
+            <div style={styles.currentTime}>
+              <FaClock /> เวลาปัจจุบัน: {currentTime}
+            </div>
           </div>
-          <div style={styles.field}>
-            <label style={styles.label}>เทอม</label>
-            <input
-              style={styles.input}
-              type="text"
-              value={config.term}
-              onChange={(e) => setConfig({ ...config, term: e.target.value })}
-              placeholder="เช่น 1"
-            />
-          </div>
-        </div>
-      </div>
 
-      {/* System Control */}
-      <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>การควบคุมระบบ</h3>
-
-        <div style={styles.toggleContainer}>
-          <label style={styles.switchLabel}>
-            <input
-              type="checkbox"
-              checked={config.isEnabled}
-              onChange={(e) =>
-                setConfig({ ...config, isEnabled: e.target.checked })
-              }
-              style={styles.checkbox}
-            />
-            เปิดใช้งานระบบ
-          </label>
-        </div>
-
-        <div style={styles.toggleContainer}>
-          <label
-            style={{
-              ...styles.switchLabel,
-              color: config.isEnabled ? "#333" : "#999",
-            }}
+          {/* System Status */}
+          <div
+            style={styles.systemStatusSection}
+            className="system-status-section"
           >
-            <input
-              type="checkbox"
-              checked={config.immediateAccess}
-              onChange={(e) =>
-                setConfig({ ...config, immediateAccess: e.target.checked })
-              }
-              disabled={!config.isEnabled}
-              style={styles.checkbox}
-            />
-            เข้าใช้งานได้ทันที (ไม่จำกัดเวลา)
-          </label>
-        </div>
-      </div>
-
-      {/* Time Settings */}
-      <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>ตั้งเวลาเปิด-ปิดระบบ</h3>
-
-        <div style={styles.formRow}>
-          <div style={styles.field}>
-            <label style={styles.label}>วันที่เริ่ม</label>
-            <input
+            <div style={styles.systemStatusLabel}>สถานะระบบ:</div>
+            <div
               style={{
-                ...styles.input,
-                opacity: config.immediateAccess ? 0.5 : 1,
+                ...styles.statusBadge,
+                color: systemStatus.color,
+                backgroundColor: systemStatus.bgColor,
               }}
-              type="date"
-              value={config.startDate}
-              onChange={(e) =>
-                setConfig({ ...config, startDate: e.target.value })
-              }
-              disabled={config.immediateAccess}
-            />
+            >
+              {systemStatus.icon}
+              {systemStatus.status}
+            </div>
           </div>
-          <div style={styles.field}>
-            <label style={styles.label}>เวลาเริ่ม</label>
-            <input
-              style={{
-                ...styles.input,
-                opacity: config.immediateAccess ? 0.5 : 1,
-              }}
-              type="time"
-              value={config.startTime}
-              onChange={(e) =>
-                setConfig({ ...config, startTime: e.target.value })
-              }
-              disabled={config.immediateAccess}
-            />
-          </div>
+
+          {/* Quick Toggle */}
+          {config.isEnabled ? (
+            <button
+              className="danger-btn"
+              style={styles.dangerButton}
+              onClick={() => handleToggleSystem(!config.isEnabled)}
+            >
+              <FaPowerOff /> ปิดระบบทันที
+            </button>
+          ) : (
+            <button
+              className="toggle-btn"
+              style={styles.systemToggleButton}
+              onClick={() => handleToggleSystem(!config.isEnabled)}
+            >
+              <FaPowerOff /> เปิดระบบทันที
+            </button>
+          )}
         </div>
 
-        <div style={styles.formRow}>
-          <div style={styles.field}>
-            <label style={styles.label}>วันที่สิ้นสุด</label>
-            <input
-              style={{
-                ...styles.input,
-                opacity: config.immediateAccess ? 0.5 : 1,
-              }}
-              type="date"
-              value={config.endDate}
-              onChange={(e) =>
-                setConfig({ ...config, endDate: e.target.value })
-              }
-              disabled={config.immediateAccess}
-            />
+        {/* Basic Settings Card */}
+        <div style={styles.card}>
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>
+              <FaCalendarAlt style={styles.sectionIcon} />
+              ข้อมูลพื้นฐาน
+            </h3>
+            <div style={styles.formRow} className="form-row">
+              <div style={styles.field}>
+                <label style={styles.label}>
+                  <FaCalendarAlt style={styles.labelIcon} />
+                  ปีการศึกษา
+                </label>
+                <input
+                  style={styles.input}
+                  type="text"
+                  value={config.academicYear}
+                  onChange={(e) =>
+                    setConfig({ ...config, academicYear: e.target.value })
+                  }
+                  placeholder="เช่น 2567"
+                />
+              </div>
+              <div style={styles.field}>
+                <label style={styles.label}>
+                  <FaCalendarAlt style={styles.labelIcon} />
+                  เทอม
+                </label>
+                <input
+                  style={styles.input}
+                  type="text"
+                  value={config.term}
+                  onChange={(e) =>
+                    setConfig({ ...config, term: e.target.value })
+                  }
+                  placeholder="เช่น 1"
+                />
+              </div>
+            </div>
           </div>
-          <div style={styles.field}>
-            <label style={styles.label}>เวลาสิ้นสุด</label>
-            <input
-              style={{
-                ...styles.input,
-                opacity: config.immediateAccess ? 0.5 : 1,
-              }}
-              type="time"
-              value={config.endTime}
-              onChange={(e) =>
-                setConfig({ ...config, endTime: e.target.value })
-              }
-              disabled={config.immediateAccess}
-            />
-          </div>
-        </div>
 
-        {!config.immediateAccess && (
+          {/* System Control Section */}
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>
+              <FaCog style={styles.sectionIcon} />
+              การควบคุมระบบ
+            </h3>
+
+            <div style={styles.toggleContainer} className="toggle-container">
+              <label style={styles.switchLabel}>
+                {config.isEnabled ? (
+                  <FaToggleOn
+                    style={{ ...styles.toggleIcon, color: "#28a745" }}
+                  />
+                ) : (
+                  <FaToggleOff style={styles.toggleIcon} />
+                )}
+                <input
+                  type="checkbox"
+                  checked={config.isEnabled}
+                  onChange={(e) =>
+                    setConfig({ ...config, isEnabled: e.target.checked })
+                  }
+                  style={styles.checkbox}
+                />
+                เปิดใช้งานระบบ
+              </label>
+            </div>
+
+            <div
+              style={{
+                ...styles.toggleContainer,
+                ...(config.isEnabled ? {} : styles.disabledSection),
+              }}
+              className="toggle-container"
+            >
+              <label style={styles.switchLabel}>
+                {config.immediateAccess ? (
+                  <FaToggleOn
+                    style={{ ...styles.toggleIcon, color: "#28a745" }}
+                  />
+                ) : (
+                  <FaToggleOff style={styles.toggleIcon} />
+                )}
+                <input
+                  type="checkbox"
+                  checked={config.immediateAccess}
+                  onChange={(e) =>
+                    setConfig({ ...config, immediateAccess: e.target.checked })
+                  }
+                  disabled={!config.isEnabled}
+                  style={styles.checkbox}
+                />
+                เข้าใช้งานได้ทันที (ไม่จำกัดเวลา)
+              </label>
+            </div>
+          </div>
+
+          {/* Time Settings Section */}
           <div
             style={{
-              fontSize: 12,
-              color: "#666",
-              fontStyle: "italic",
-              marginTop: 5,
+              ...styles.section,
+              ...(config.immediateAccess ? styles.disabledSection : {}),
             }}
           >
-            * ระบบจะปิดอัตโนมัติเมื่อถึงเวลาสิ้นสุด (เขตเวลา: Asia/Bangkok)
+            <h3 style={styles.sectionTitle}>
+              <FaClock style={styles.sectionIcon} />
+              ตั้งเวลาเปิด-ปิดระบบ
+            </h3>
+
+            <div style={styles.formRow} className="form-row">
+              <div style={styles.field}>
+                <label style={styles.label}>
+                  <FaCalendarAlt style={styles.labelIcon} />
+                  วันที่เริ่ม
+                </label>
+                <input
+                  style={styles.input}
+                  type="date"
+                  value={config.startDate}
+                  onChange={(e) =>
+                    setConfig({ ...config, startDate: e.target.value })
+                  }
+                  disabled={config.immediateAccess}
+                />
+              </div>
+              <div style={styles.field}>
+                <label style={styles.label}>
+                  <FaClock style={styles.labelIcon} />
+                  เวลาเริ่ม
+                </label>
+                <input
+                  style={styles.input}
+                  type="time"
+                  value={config.startTime}
+                  onChange={(e) =>
+                    setConfig({ ...config, startTime: e.target.value })
+                  }
+                  disabled={config.immediateAccess}
+                />
+              </div>
+            </div>
+
+            <div style={styles.formRow} className="form-row">
+              <div style={styles.field}>
+                <label style={styles.label}>
+                  <FaCalendarAlt style={styles.labelIcon} />
+                  วันที่สิ้นสุด
+                </label>
+                <input
+                  style={styles.input}
+                  type="date"
+                  value={config.endDate}
+                  onChange={(e) =>
+                    setConfig({ ...config, endDate: e.target.value })
+                  }
+                  disabled={config.immediateAccess}
+                />
+              </div>
+              <div style={styles.field}>
+                <label style={styles.label}>
+                  <FaClock style={styles.labelIcon} />
+                  เวลาสิ้นสุด
+                </label>
+                <input
+                  style={styles.input}
+                  type="time"
+                  value={config.endTime}
+                  onChange={(e) =>
+                    setConfig({ ...config, endTime: e.target.value })
+                  }
+                  disabled={config.immediateAccess}
+                />
+              </div>
+            </div>
+
+            {!config.immediateAccess && (
+              <div style={styles.noteText}>
+                <FaExclamationTriangle />* ระบบจะปิดอัตโนมัติเมื่อถึงเวลาสิ้นสุด
+                (เขตเวลา: Asia/Bangkok)
+              </div>
+            )}
+          </div>
+
+          {/* Save Button */}
+          <button
+            className="save-btn"
+            style={styles.saveButton}
+            onClick={saveConfig}
+          >
+            <FaSave /> บันทึกการตั้งค่า
+          </button>
+        </div>
+
+        {config.lastUpdated && (
+          <div style={styles.lastUpdated}>
+            <FaHistory />
+            อัพเดทล่าสุด:{" "}
+            {config.lastUpdated.seconds
+              ? new Date(config.lastUpdated.seconds * 1000).toLocaleString(
+                  "th-TH"
+                )
+              : "ไม่ทราบ"}
           </div>
         )}
       </div>
-
-      {/* Save Button */}
-      <button style={styles.saveButton} onClick={saveConfig}>
-        บันทึก
-      </button>
-
-      {config.lastUpdated && (
-        <div
-          style={{
-            textAlign: "center",
-            fontSize: 12,
-            color: "#666",
-            marginTop: 15,
-            marginBottom: 20,
-          }}
-        >
-          อัพเดทล่าสุด:{" "}
-          {config.lastUpdated.seconds
-            ? new Date(config.lastUpdated.seconds * 1000).toLocaleString(
-                "th-TH"
-              )
-            : "ไม่ทราบ"}
-        </div>
-      )}
     </div>
   );
 };
