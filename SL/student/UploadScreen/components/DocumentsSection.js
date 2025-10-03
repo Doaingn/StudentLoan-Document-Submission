@@ -57,6 +57,7 @@ const DocumentsSection = ({
           "id_copies_student",
           "id_copies_father",
           "id_copies_mother",
+          "guardian_consent"
         ];
       case "2":
       case "3":
@@ -83,6 +84,7 @@ const DocumentsSection = ({
           "single_parent_income_cert",
           "famo_income_cert",
           "family_status_cert",
+          "guardian_consent",
         ];
       case "2":
       case "3":
