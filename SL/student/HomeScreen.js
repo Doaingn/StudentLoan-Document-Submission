@@ -34,10 +34,7 @@ const HomeScreen = ({ navigation }) => {
   const fetchNewsData = async () => {
     try {
       setLoading(true);
-      const q = query(
-        collection(db, "news"), // เปลี่ยนชื่อ collection ตามที่ใช้จริง
-        orderBy("createdAt", "desc")
-      );
+      const q = query(collection(db, "news"), orderBy("createdAt", "desc"));
 
       const querySnapshot = await getDocs(q);
       const data = [];
@@ -72,12 +69,10 @@ const HomeScreen = ({ navigation }) => {
   const applyFilters = () => {
     let filtered = [...newsData];
 
-    // Apply filter by postType
     if (selectedFilter !== "ทั้งหมด") {
       filtered = filtered.filter((item) => item.postType === selectedFilter);
     }
 
-    // Apply search
     if (searchText.trim()) {
       filtered = filtered.filter(
         (item) =>
@@ -89,17 +84,14 @@ const HomeScreen = ({ navigation }) => {
     setFilteredData(filtered);
   };
 
-  // useEffect สำหรับดึงข้อมูลครั้งแรก
   useEffect(() => {
     fetchNewsData();
   }, []);
 
-  // useEffect สำหรับ filter และ search
   useEffect(() => {
     applyFilters();
   }, [searchText, selectedFilter, newsData]);
 
-  // Format วันที่
   const formatDate = (timestamp) => {
     if (!timestamp) return "";
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -110,14 +102,10 @@ const HomeScreen = ({ navigation }) => {
     });
   };
 
-  // Render Filter Buttons
   const renderFilterButton = (filter) => (
     <TouchableOpacity
       key={filter}
-      style={[
-        styles.filterButton,
-        selectedFilter === filter && styles.activeFilterButton,
-      ]}
+      style={styles.filterButton}
       onPress={() => setSelectedFilter(filter)}
     >
       <Text
@@ -128,10 +116,10 @@ const HomeScreen = ({ navigation }) => {
       >
         {filter}
       </Text>
+      {selectedFilter === filter && <View style={styles.underline} />}
     </TouchableOpacity>
   );
 
-  // Render News Item
   const renderNewsItem = ({ item }) => (
     <TouchableOpacity
       style={styles.newsItem}
@@ -157,26 +145,8 @@ const HomeScreen = ({ navigation }) => {
           {item.title}
         </Text>
         <Text style={styles.description} numberOfLines={3}>
-          {item.description
-            ? item.description.replace(/<[^>]+>/g, "") // ลบ tag HTML เช่น <p> </p>
-            : ""}
+          {item.description ? item.description.replace(/<[^>]+>/g, "") : ""}
         </Text>
-
-        {item.mediaURLs && item.mediaURLs.length > 0 && (
-          <View style={styles.mediaIndicator}>
-            <Ionicons name="images-outline" size={16} color="#666" />
-            <Text style={styles.mediaCount}>
-              {item.mediaURLs.length} รูปภาพ
-            </Text>
-          </View>
-        )}
-
-        {item.documentURL && (
-          <View style={styles.documentIndicator}>
-            <Ionicons name="document-attach-outline" size={16} color="#666" />
-            <Text style={styles.documentName}>{item.documentName}</Text>
-          </View>
-        )}
       </View>
     </TouchableOpacity>
   );
@@ -194,7 +164,7 @@ const HomeScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header with Search Bar and Profile */}
+      {/* Header with Search Bar */}
       <View style={styles.header}>
         <View style={styles.searchContainer}>
           <Ionicons
@@ -205,7 +175,7 @@ const HomeScreen = ({ navigation }) => {
           />
           <TextInput
             style={styles.searchInput}
-            placeholder="ค้นหาข่าวสาร..."
+            placeholder="ค้นหา..."
             value={searchText}
             onChangeText={setSearchText}
           />
@@ -246,7 +216,7 @@ const HomeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#f0f2f5",
   },
   loadingContainer: {
     flex: 1,
@@ -259,68 +229,17 @@ const styles = StyleSheet.create({
     color: "#666",
   },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 10,
+    backgroundColor: "#f0f2f5",
   },
   searchContainer: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f0f0f0",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    height: 40,
-    fontSize: 16,
-  },
-  profileButton: {
-    padding: 4,
-  },
-  filterContainer: {
-    backgroundColor: "#f5f5f5", // เปลี่ยนให้เหมือน container
-    paddingVertical: 8,
-    borderBottomColor: "#e0e0e0",
-  },
-  filterList: {
-    paddingHorizontal: 16,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginRight: 8,
-    borderRadius: 20,
-    backgroundColor: "#ffffff",
-  },
-  activeFilterButton: {
-    backgroundColor: "#007AFF",
-  },
-  filterText: {
-    fontSize: 14,
-    color: "#666",
-  },
-  activeFilterText: {
-    color: "#fff",
-  },
-  newsList: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  newsItem: {
     backgroundColor: "#fff",
-    borderRadius: 12,
-    marginBottom: 16,
-    overflow: "hidden",
-    elevation: 2,
+    borderRadius: 10,
+    paddingHorizontal: 15,
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
@@ -328,6 +247,69 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
+    elevation: 5,
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    height: 50,
+    fontSize: 16,
+    color: "#333",
+  },
+  filterContainer: {
+    backgroundColor: "#f0f2f5",
+    paddingBottom: 5,
+  },
+  filterList: {
+    paddingHorizontal: 20,
+  },
+  filterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginRight: 20,
+    alignItems: "center",
+  },
+  activeFilterButton: {
+    // ไม่ใช้แล้ว
+  },
+  filterText: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#666",
+  },
+  activeFilterText: {
+    color: "#007AFF",
+    fontWeight: "600",
+  },
+  underline: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: "#007AFF",
+    borderRadius: 2,
+  },
+  newsList: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 20,
+  },
+  newsItem: {
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    marginBottom: 20,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   bannerImage: {
     width: "100%",
@@ -341,21 +323,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   newsContent: {
-    padding: 16,
+    padding: 20,
   },
   newsHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 12,
   },
   postType: {
     fontSize: 12,
+    fontWeight: "500",
     color: "#007AFF",
     backgroundColor: "#e3f2fd",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
   dateText: {
     fontSize: 12,
@@ -365,39 +348,44 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "#333",
-    marginBottom: 8,
+    marginBottom: 10,
+    lineHeight: 24,
   },
   description: {
     fontSize: 14,
     color: "#666",
-    lineHeight: 20,
-    marginBottom: 8,
+    lineHeight: 22,
+    marginBottom: 10,
   },
   mediaIndicator: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
   },
   mediaCount: {
     fontSize: 12,
     color: "#666",
-    marginLeft: 4,
+    marginLeft: 6,
   },
   documentIndicator: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 4,
+    marginTop: 6,
   },
   documentName: {
     fontSize: 12,
     color: "#666",
-    marginLeft: 4,
+    marginLeft: 6,
+    flex: 1,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 40,
+    paddingVertical: 60,
   },
   emptyText: {
     fontSize: 16,
