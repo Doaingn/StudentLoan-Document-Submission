@@ -4,6 +4,7 @@ import { InsertForm101 } from "../../documents/InsertForm101";
 import { ConsentFrom_student } from "../../documents/ConsentFrom_student";
 import { ConsentFrom_father } from "../../documents/ConsentFrom_father";
 import { ConsentFrom_mother } from "../../documents/ConsentFrom_mother";
+import { ConsentFrom_guardian } from "../../documents/ConsentFrom_guardian";
 import { Income102 } from "../../documents/income102";
 import { FamStatus_cert } from "../../documents/FamStatus_cert";
 
@@ -16,7 +17,10 @@ export const handleDocumentDownload = (docId, downloadUrl) => {
     ConsentFrom_father();
   } else if (docId === "consent_mother_form") {
     ConsentFrom_mother();
-  } else if (
+  } else if (docId === "guardian_consent") {
+    ConsentFrom_guardian();
+  }
+   else if (
     docId === "guardian_income_cert" ||
     docId === "father_income_cert" ||
     docId === "mother_income_cert" ||
@@ -34,4 +38,3 @@ export const handleDocumentDownload = (docId, downloadUrl) => {
     Alert.alert("ไม่พบไฟล์", "ไม่สามารถดาวน์โหลดไฟล์นี้ได้ในขณะนี้");
   }
 };
-
