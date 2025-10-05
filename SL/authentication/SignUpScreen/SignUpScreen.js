@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { setDistricts, setSubDistricts } from "./signup-steps/AddressStep";
 import { auth, db } from "../../database/firebase";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc, Timestamp } from "firebase/firestore";
@@ -31,6 +30,7 @@ import styles from "./signup-styles/styles";
 const SignUpScreen = ({ navigation }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const scrollViewRef = useRef(null);
 
   // Use custom hooks
   const {
@@ -41,7 +41,19 @@ const SignUpScreen = ({ navigation }) => {
     permSubDistricts,
     addressLoading,
     addressError,
+    setDistricts,
+    setSubDistricts,
+    setPermDistricts,
+    setPermSubDistricts,
+    // Address functions - THESE COME FROM useAddressData
+    resetAddressSelection,
+    handleProvinceChange,
+    handleDistrictChange,
+    handleSubDistrictChange,
+    workplaceDistricts,
+    workplaceSubDistricts,
   } = useAddressData();
+
   const {
     // Basic Info
     email,
@@ -91,7 +103,7 @@ const SignUpScreen = ({ navigation }) => {
     guardianInfo,
     setGuardianInfo,
 
-    // Helper functions
+    // Helper functions - THESE COME FROM useFormState
     updateCurrentAddress,
     updatePermAddress,
     updateFatherInfo,
@@ -101,10 +113,8 @@ const SignUpScreen = ({ navigation }) => {
     updateGuardianInfo,
     updateGuardianAddress,
     copyPermToCurrent,
-    handleProvinceChange,
-    handleDistrictChange,
-    handleSubDistrictChange,
-    resetAddressSelection,
+
+    // Date Picker functions - THESE COME FROM useFormState
     showDatePicker,
     hideDatePicker,
     handleConfirm,
@@ -118,6 +128,13 @@ const SignUpScreen = ({ navigation }) => {
     hideGuardianDatePicker,
     handleGuardianConfirm,
   } = useFormState();
+
+  // Scroll to top when step changes
+  useEffect(() => {
+    if (scrollViewRef.current) {
+      scrollViewRef.current.scrollTo({ y: 0, animated: true });
+    }
+  }, [currentStep]);
 
   const handleSignUpPress = async () => {
     await handleSignUp(
@@ -137,8 +154,18 @@ const SignUpScreen = ({ navigation }) => {
       motherInfo,
       guardianInfo,
       setIsLoading,
-      navigation
+      navigation,
+      auth,
+      db
     );
+  };
+
+  const handleNextStep = () => {
+    setCurrentStep(currentStep + 1);
+  };
+
+  const handlePrevStep = () => {
+    setCurrentStep(currentStep - 1);
   };
 
   const renderStep = () => {
@@ -196,6 +223,8 @@ const SignUpScreen = ({ navigation }) => {
             setCurrentAddress={setCurrentAddress}
             setDistricts={setDistricts}
             setSubDistricts={setSubDistricts}
+            setPermDistricts={setPermDistricts}
+            setPermSubDistricts={setPermSubDistricts}
           />
         );
 
@@ -222,6 +251,8 @@ const SignUpScreen = ({ navigation }) => {
             resetAddressSelection={resetAddressSelection}
             copyPermToCurrent={copyPermToCurrent}
             setPersonInfo={setFatherInfo}
+            workplaceDistricts={workplaceDistricts}
+            workplaceSubDistricts={workplaceSubDistricts}
           />
         );
 
@@ -248,6 +279,8 @@ const SignUpScreen = ({ navigation }) => {
             resetAddressSelection={resetAddressSelection}
             copyPermToCurrent={copyPermToCurrent}
             setPersonInfo={setMotherInfo}
+            workplaceDistricts={workplaceDistricts}
+            workplaceSubDistricts={workplaceSubDistricts}
           />
         );
 
@@ -272,6 +305,8 @@ const SignUpScreen = ({ navigation }) => {
             resetAddressSelection={resetAddressSelection}
             copyPermToCurrent={copyPermToCurrent}
             setGuardianInfo={setGuardianInfo}
+            workplaceDistricts={workplaceDistricts}
+            workplaceSubDistricts={workplaceSubDistricts}
           />
         );
 
@@ -283,6 +318,7 @@ const SignUpScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -338,7 +374,7 @@ const SignUpScreen = ({ navigation }) => {
           {currentStep > 1 && (
             <TouchableOpacity
               style={[styles.navButton, styles.prevButton]}
-              onPress={() => setCurrentStep(currentStep - 1)}
+              onPress={handlePrevStep}
             >
               <Ionicons
                 name="arrow-back"
@@ -357,7 +393,7 @@ const SignUpScreen = ({ navigation }) => {
                 styles.nextButton,
                 currentStep === 1 && styles.fullWidth,
               ]}
-              onPress={() => setCurrentStep(currentStep + 1)}
+              onPress={handleNextStep}
             >
               <Text style={styles.nextButtonText}>ถัดไป</Text>
               <Ionicons
