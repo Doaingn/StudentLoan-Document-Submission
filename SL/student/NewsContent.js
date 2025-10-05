@@ -10,16 +10,20 @@ import {
   Dimensions,
   SafeAreaView,
   ActivityIndicator,
+  Modal,
+  StatusBar,
 } from "react-native";
 import RenderHtml from "react-native-render-html";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../database/firebase";
+import { Ionicons } from "@expo/vector-icons";
 
 const NewsContent = ({ route }) => {
   const { newsId, item: passedItem } = route.params || {};
   const [item, setItem] = useState(passedItem || null);
   const [loading, setLoading] = useState(!passedItem);
   const [imageHeights, setImageHeights] = useState({});
+  const [zoomedImage, setZoomedImage] = useState(null);
   const { width } = Dimensions.get("window");
 
   useEffect(() => {
@@ -74,6 +78,14 @@ const NewsContent = ({ route }) => {
     }
   };
 
+  const openImageZoom = (imageUrl) => {
+    setZoomedImage(imageUrl);
+  };
+
+  const closeImageZoom = () => {
+    setZoomedImage(null);
+  };
+
   const renderMedia = () => {
     if (!item.mediaURLs || item.mediaURLs.length === 0) return null;
 
@@ -91,21 +103,26 @@ const NewsContent = ({ route }) => {
       }
 
       return (
-        <Image
+        <TouchableOpacity
           key={index}
-          source={{ uri: media }}
-          style={[
-            styles.mediaImage,
-            imageHeights[index] && { height: imageHeights[index] },
-          ]}
-          onLoad={(event) => {
-            const { width: imgWidth, height: imgHeight } =
-              event.nativeEvent.source;
-            const screenWidth = width - 30; // padding
-            const scaledHeight = (imgHeight / imgWidth) * screenWidth;
-            setImageHeights((prev) => ({ ...prev, [index]: scaledHeight }));
-          }}
-        />
+          activeOpacity={0.9}
+          onPress={() => openImageZoom(media)}
+        >
+          <Image
+            source={{ uri: media }}
+            style={[
+              styles.mediaImage,
+              imageHeights[index] && { height: imageHeights[index] },
+            ]}
+            onLoad={(event) => {
+              const { width: imgWidth, height: imgHeight } =
+                event.nativeEvent.source;
+              const screenWidth = width - 30;
+              const scaledHeight = (imgHeight / imgWidth) * screenWidth;
+              setImageHeights((prev) => ({ ...prev, [index]: scaledHeight }));
+            }}
+          />
+        </TouchableOpacity>
       );
     });
   };
@@ -170,6 +187,40 @@ const NewsContent = ({ route }) => {
           />
         ) : null}
       </ScrollView>
+
+      {/* Image Zoom Modal */}
+      <Modal
+        visible={!!zoomedImage}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={closeImageZoom}
+      >
+        <View style={styles.modalContainer}>
+          <StatusBar
+            backgroundColor="rgba(0,0,0,0.9)"
+            barStyle="light-content"
+          />
+          <TouchableOpacity style={styles.closeButton} onPress={closeImageZoom}>
+            <Ionicons name="close" size={30} color="#fff" />
+          </TouchableOpacity>
+
+          <ScrollView
+            contentContainerStyle={styles.zoomScrollContainer}
+            maximumZoomScale={3}
+            minimumZoomScale={1}
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
+          >
+            {zoomedImage && (
+              <Image
+                source={{ uri: zoomedImage }}
+                style={styles.zoomedImage}
+                resizeMode="contain"
+              />
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -238,6 +289,30 @@ const styles = StyleSheet.create({
   documentText: {
     color: "#fff",
     fontWeight: "500",
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  closeButton: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    zIndex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    borderRadius: 20,
+    padding: 8,
+  },
+  zoomScrollContainer: {
+    flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  zoomedImage: {
+    width: Dimensions.get("window").width,
+    height: Dimensions.get("window").height,
   },
 });
 
