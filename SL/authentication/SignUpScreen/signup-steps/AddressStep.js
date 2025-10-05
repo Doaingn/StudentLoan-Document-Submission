@@ -94,7 +94,6 @@ const AddressStep = ({
                 if (value === "") {
                   updateFunction("district", "");
                   updateFunction("sub_district", "");
-                  updateFunction("zipcode", "");
                 } else {
                   updateFunction("district", value);
                   const selectedDistrict = currentDistricts.find(
@@ -117,17 +116,12 @@ const AddressStep = ({
               onValueChange={(value) => {
                 if (value === "") {
                   updateFunction("sub_district", "");
-                  updateFunction("zipcode", "");
                 } else {
                   updateFunction("sub_district", value);
                   const selectedSubDistrict = currentSubDistricts.find(
                     (s) => s.name_th === value
                   );
                   handleSubDistrictChange(selectedSubDistrict?.id, type);
-                  // Auto-fill zipcode
-                  if (selectedSubDistrict?.zip_code) {
-                    updateFunction("zipcode", selectedSubDistrict.zip_code);
-                  }
                 }
               }}
               items={subDistrictItems}
@@ -137,7 +131,7 @@ const AddressStep = ({
               enabled={!isSubDistrictDisabled}
             />
 
-            {/* Zipcode Display */}
+            {/* Zipcode Input */}
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>รหัสไปรษณีย์</Text>
               <View style={styles.inputWrapper}>
@@ -148,10 +142,12 @@ const AddressStep = ({
                   style={styles.inputIcon}
                 />
                 <TextInput
-                  style={[styles.input, styles.disabledInput]}
+                  style={styles.input}
                   value={addressData.zipcode}
-                  placeholder="รหัสไปรษณีย์จะแสดงอัตโนมัติ"
-                  editable={false}
+                  placeholder="กรุณาป้อนรหัสไปรษณีย์"
+                  onChangeText={(text) => updateFunction("zipcode", text)}
+                  keyboardType="numeric"
+                  maxLength={5}
                 />
               </View>
             </View>

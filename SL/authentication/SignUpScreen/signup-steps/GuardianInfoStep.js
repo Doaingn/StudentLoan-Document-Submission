@@ -24,22 +24,31 @@ const GuardianInfoStep = ({
   resetAddressSelection,
   copyPermToCurrent,
   setGuardianInfo,
+  workplaceDistricts,
+  workplaceSubDistricts,
 }) => {
   const renderThaiAddressSelector = (
     addressData,
     updateFunction,
     addressType = "current"
   ) => {
-    const currentDistricts = districts;
-    const currentSubDistricts = subDistricts;
+    let currentDistricts, currentSubDistricts;
+
+    if (addressType === "workplace") {
+      currentDistricts = workplaceDistricts || [];
+      currentSubDistricts = workplaceSubDistricts || [];
+    } else {
+      currentDistricts = districts || [];
+      currentSubDistricts = subDistricts || [];
+    }
 
     const isDistrictDisabled =
       !addressData.province || currentDistricts.length === 0;
     const isSubDistrictDisabled =
       !addressData.district || currentSubDistricts.length === 0;
 
-    // แปลงข้อมูลเป็น format สำหรับ CrossPlatformPicker
-    const provinceItems = provinces.map((p) => ({
+    const provinceItems = (provinces || []).map((p) => ({
+      // เพิ่ม || []
       label: p.name_th,
       value: p.name_th,
     }));
@@ -62,18 +71,22 @@ const GuardianInfoStep = ({
           <Text style={styles.errorText}>{addressError}</Text>
         ) : (
           <>
-            {/* Province Selector */}
             <CrossPlatformPicker
               label="จังหวัด"
               selectedValue={addressData.province}
               onValueChange={(value) => {
                 if (value === "") {
                   resetAddressSelection(addressType);
+                  updateFunction("province", "");
+                  updateFunction("district", "");
+                  updateFunction("sub_district", "");
+                  updateFunction("zipcode", "");
                 } else {
                   updateFunction("province", value);
                   const selectedProvince = provinces.find(
                     (p) => p.name_th === value
                   );
+                  // ตรวจสอบว่าใช้ addressType ถูกต้อง
                   handleProvinceChange(selectedProvince?.id, addressType);
                 }
               }}
@@ -82,7 +95,6 @@ const GuardianInfoStep = ({
               enabled={true}
             />
 
-            {/* District Selector */}
             <CrossPlatformPicker
               label="อำเภอ/เขต"
               selectedValue={addressData.district}
@@ -106,7 +118,6 @@ const GuardianInfoStep = ({
               enabled={!isDistrictDisabled}
             />
 
-            {/* Sub-district Selector */}
             <CrossPlatformPicker
               label="ตำบล/แขวง"
               selectedValue={addressData.sub_district}
@@ -120,7 +131,6 @@ const GuardianInfoStep = ({
                     (s) => s.name_th === value
                   );
                   handleSubDistrictChange(selectedSubDistrict?.id, addressType);
-                  // Auto-fill zipcode
                   if (selectedSubDistrict?.zip_code) {
                     updateFunction("zipcode", selectedSubDistrict.zip_code);
                   }
@@ -133,7 +143,6 @@ const GuardianInfoStep = ({
               enabled={!isSubDistrictDisabled}
             />
 
-            {/* Zipcode Display */}
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>รหัสไปรษณีย์</Text>
               <View style={styles.inputWrapper}>
@@ -144,10 +153,12 @@ const GuardianInfoStep = ({
                   style={styles.inputIcon}
                 />
                 <TextInput
-                  style={[styles.input, styles.disabledInput]}
+                  style={styles.input}
                   value={addressData.zipcode}
-                  placeholder="รหัสไปรษณีย์จะแสดงอัตโนมัติ"
-                  editable={false}
+                  placeholder="กรุณาป้อนรหัสไปรษณีย์"
+                  onChangeText={(text) => updateFunction("zipcode", text)}
+                  keyboardType="numeric"
+                  maxLength={5}
                 />
               </View>
             </View>
@@ -157,7 +168,12 @@ const GuardianInfoStep = ({
     );
   };
 
-  const renderAddressForm = (addressData, updateFunction, title) => (
+  const renderAddressForm = (
+    addressData,
+    updateFunction,
+    title,
+    addressType = "current"
+  ) => (
     <View style={styles.section}>
       {title && <Text style={styles.sectionTitle}>{title}</Text>}
 
@@ -231,8 +247,7 @@ const GuardianInfoStep = ({
         </View>
       </View>
 
-      {/* Thai Address Selector */}
-      {renderThaiAddressSelector(addressData, updateFunction, "current")}
+      {renderThaiAddressSelector(addressData, updateFunction, addressType)}
     </View>
   );
 
@@ -328,33 +343,52 @@ const GuardianInfoStep = ({
           </View>
         </View>
 
-        <View style={styles.row}>
-          <View style={[styles.inputContainer, styles.halfWidth]}>
-            <Text style={styles.inputLabel}>อาชีพ</Text>
-            <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="อาชีพ"
-                value={guardianInfo.occupation}
-                onChangeText={(text) => updateGuardianInfo("occupation", text)}
-              />
-            </View>
-          </View>
-
-          <View style={[styles.inputContainer, styles.halfWidth]}>
-            <Text style={styles.inputLabel}>ระดับการศึกษา</Text>
-            <View style={styles.inputWrapper}>
-              <TextInput
-                style={styles.input}
-                placeholder="ระดับการศึกษา"
-                value={guardianInfo.education_level}
-                onChangeText={(text) =>
-                  updateGuardianInfo("education_level", text)
-                }
-              />
-            </View>
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>อาชีพ</Text>
+          <View style={styles.inputWrapper}>
+            <Ionicons
+              name="briefcase-outline"
+              size={20}
+              color="#666"
+              style={styles.inputIcon}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="อาชีพ"
+              value={guardianInfo.occupation}
+              onChangeText={(text) => updateGuardianInfo("occupation", text)}
+            />
           </View>
         </View>
+
+        <CrossPlatformPicker
+          label="ระดับการศึกษา"
+          selectedValue={guardianInfo.education_level}
+          iconName="school-outline"
+          onValueChange={(value) =>
+            updateGuardianInfo("education_level", value)
+          }
+          items={[
+            { label: "อนุบาล", value: "อนุบาล" },
+            { label: "ประถม", value: "ประถม" },
+            { label: "มัธยมศึกษาตอนต้น", value: "มัธยมศึกษาตอนต้น" },
+            {
+              label: "มัธยมศึกษาตอนปลาย (สายสามัญ)",
+              value: "มัธยมศึกษาตอนปลาย (สายสามัญ)",
+            },
+            {
+              label: "มัธยมศึกษาตอนปลาย (สายอาชีพ/ปวช.)",
+              value: "มัธยมศึกษาตอนปลาย (สายอาชีพ/ปวช.)",
+            },
+            { label: "อนุปริญญา/ปวส.", value: "อนุปริญญา/ปวส." },
+            { label: "ปริญญาตรี", value: "ปริญญาตรี" },
+            { label: "ปริญญาโท", value: "ปริญญาโท" },
+            { label: "ปริญญาเอก", value: "ปริญญาเอก" },
+          ]}
+          placeholder="เลือกระดับการศึกษา"
+          enabled={true}
+          textAlign="left"
+        />
 
         <View style={styles.inputContainer}>
           <Text style={styles.inputLabel}>เบอร์โทรศัพท์</Text>
@@ -414,7 +448,6 @@ const GuardianInfoStep = ({
           </View>
         </View>
 
-        {/* Guardian-specific field */}
         <View style={styles.inputContainer}>
           <Text style={styles.inputLabel}>ความสัมพันธ์กับนักศึกษา</Text>
           <View style={styles.inputWrapper}>
@@ -494,7 +527,8 @@ const GuardianInfoStep = ({
               ...guardianInfo.workplace,
               [field]: value,
             }),
-          ""
+          "",
+          "workplace"
         )}
       </View>
     </View>
