@@ -13,27 +13,20 @@ import {
 } from "react-native";
 import RenderHtml from "react-native-render-html";
 import { doc, getDoc } from "firebase/firestore";
-import { db } from "../database/firebase"; // Adjust path as needed
+import { db } from "../database/firebase";
 
 const NewsContent = ({ route }) => {
-  // Debug: Log what we received
-
-  const { newsId, item: passedItem } = route.params || {}; // Get both newsId and item from navigation
+  const { newsId, item: passedItem } = route.params || {};
   const [item, setItem] = useState(passedItem || null);
-  const [loading, setLoading] = useState(!passedItem); // Don't load if item is already passed
+  const [loading, setLoading] = useState(!passedItem);
+  const [imageHeights, setImageHeights] = useState({});
   const { width } = Dimensions.get("window");
 
-  // Debug: Log the extracted values
-  console.log("passedItem:", passedItem ? "exists" : "null");
-
-  // Fetch news item by ID
   useEffect(() => {
-    // If item is already passed, don't fetch
     if (passedItem) {
       return;
     }
 
-    // If no newsId, can't fetch
     if (!newsId) {
       console.error("No newsId provided");
       setLoading(false);
@@ -73,7 +66,6 @@ const NewsContent = ({ route }) => {
     fetchNewsItem();
   }, [newsId, passedItem]);
 
-  // ฟังก์ชันเปิดไฟล์ Document (PDF) ถ้ามี
   const openDocument = (url) => {
     if (url) {
       Linking.openURL(url).catch((err) =>
@@ -82,12 +74,10 @@ const NewsContent = ({ route }) => {
     }
   };
 
-  // ฟังก์ชันแสดง Media
   const renderMedia = () => {
     if (!item.mediaURLs || item.mediaURLs.length === 0) return null;
 
     return item.mediaURLs.map((media, index) => {
-      // ถ้าเป็น YouTube link ให้เปิดผ่าน Linking
       if (media.includes("youtube.com") || media.includes("youtu.be")) {
         return (
           <TouchableOpacity
@@ -100,9 +90,22 @@ const NewsContent = ({ route }) => {
         );
       }
 
-      // ถ้าเป็นรูปภาพ
       return (
-        <Image key={index} source={{ uri: media }} style={styles.mediaImage} />
+        <Image
+          key={index}
+          source={{ uri: media }}
+          style={[
+            styles.mediaImage,
+            imageHeights[index] && { height: imageHeights[index] },
+          ]}
+          onLoad={(event) => {
+            const { width: imgWidth, height: imgHeight } =
+              event.nativeEvent.source;
+            const screenWidth = width - 30; // padding
+            const scaledHeight = (imgHeight / imgWidth) * screenWidth;
+            setImageHeights((prev) => ({ ...prev, [index]: scaledHeight }));
+          }}
+        />
       );
     });
   };
@@ -146,10 +149,8 @@ const NewsContent = ({ route }) => {
           </Text>
         </View>
 
-        {/* Media */}
         {renderMedia()}
 
-        {/* Document / File */}
         {item.documentURL ? (
           <TouchableOpacity
             onPress={() => openDocument(item.documentURL)}
@@ -159,10 +160,9 @@ const NewsContent = ({ route }) => {
           </TouchableOpacity>
         ) : null}
 
-        {/* Description ที่รองรับ HTML */}
         {item.description ? (
           <RenderHtml
-            contentWidth={width - 30} // 30 = padding ซ้าย 15 + padding ขวา 15
+            contentWidth={width - 30}
             source={{
               html: `<div style="font-size: 16px; color: #000000ff; line-height: 22;">${item.description}</div>`,
             }}
@@ -211,9 +211,11 @@ const styles = StyleSheet.create({
   },
   mediaImage: {
     width: "100%",
-    height: 200,
+    minHeight: 200,
     borderRadius: 10,
     marginBottom: 15,
+    resizeMode: "contain",
+    backgroundColor: "#f0f0f0",
   },
   mediaButton: {
     backgroundColor: "#1e90ff",
