@@ -23,6 +23,8 @@ const CrossPlatformPicker = ({
   enabled = true,
   label,
   style,
+  iconName = "location-outline",
+  textAlign = "left",
 }) => {
   const [isModalVisible, setModalVisible] = useState(false);
   const [tempValue, setTempValue] = useState(selectedValue);
@@ -47,7 +49,7 @@ const CrossPlatformPicker = ({
         {label && <Text style={styles.label}>{label}</Text>}
         <View style={[styles.pickerWrapper, !enabled && styles.disabled]}>
           <Ionicons
-            name="location-outline"
+            name={iconName}
             size={20}
             color={enabled ? "#666" : "#ccc"}
             style={styles.icon}
@@ -86,7 +88,7 @@ const CrossPlatformPicker = ({
         activeOpacity={0.7}
       >
         <Ionicons
-          name="location-outline"
+          name={iconName}
           size={20}
           color={enabled ? "#666" : "#ccc"}
           style={styles.icon}
@@ -96,7 +98,10 @@ const CrossPlatformPicker = ({
             styles.iosButtonText,
             !selectedValue && styles.placeholderText,
             !enabled && styles.disabledText,
+            { textAlign: textAlign },
           ]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
         >
           {selectedLabel}
         </Text>
@@ -113,11 +118,12 @@ const CrossPlatformPicker = ({
         animationType="slide"
         onRequestClose={handleCancel}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={handleCancel}
-        >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={handleCancel}
+          />
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <TouchableOpacity
@@ -152,7 +158,7 @@ const CrossPlatformPicker = ({
               ))}
             </Picker>
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
     </View>
   );
@@ -182,15 +188,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#f9f9f9",
   },
   icon: {
-    marginLeft: 12,
+    marginLeft: 0,
   },
   androidPicker: {
     flex: 1,
     height: 50,
     color: "#333",
+    backgroundColor: "#fff",
+    textAlign: "left",
   },
   iosButton: {
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#fff",
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#ddd",
@@ -198,6 +206,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     minHeight: 50,
+    textAlign: "left",
   },
   iosButtonText: {
     flex: 1,
@@ -259,10 +268,14 @@ const styles = StyleSheet.create({
   iosPicker: {
     width: "100%",
     height: 216,
+    backgroundColor: "#fff",
   },
   iosPickerItem: {
     fontSize: 20,
     height: 216,
+    color: "#000",
+    textAlign: "left",
+    paddingRight: 20,
   },
 });
 
