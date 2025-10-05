@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
     color: "#007AFF",
   },
   subTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
     marginBottom: 12,
     marginTop: 20,
@@ -311,6 +311,66 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 14,
     color: "#ff3b30",
+  },
+  picker: {
+    flex: 1,
+    color: "#333",
+  },
+  pickerText: {
+    flex: 1,
+    fontSize: 16,
+    color: "#333",
+    paddingVertical: 12,
+  },
+  pickerItem: {
+    fontSize: 18,
+    color: "#333",
+  },
+  iosPicker: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+
+  // Modal Styles
+  modalContainer: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#f8f8f8",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  modalButton: {
+    padding: 8,
+  },
+  modalTitleContainer: {
+    flex: 1,
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+  },
+  modalCancelText: {
+    fontSize: 16,
+    color: "#666",
+  },
+  modalConfirmText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#007AFF",
+  },
+  pickerContainer: {
+    backgroundColor: "#fff",
+    height: 200,
   },
 });
 
