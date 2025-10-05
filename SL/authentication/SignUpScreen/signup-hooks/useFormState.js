@@ -37,6 +37,16 @@ export const useFormState = () => {
     zipcode: "",
   });
 
+  const [pickerStates, setPickerStates] = useState({
+    currentProvince: "",
+    currentDistrict: "",
+    currentSubDistrict: "",
+  });
+
+  const updatePickerState = (key, value) => {
+    setPickerStates((prev) => ({ ...prev, [key]: value }));
+  };
+
   // Permanent Address
   const [permAddress, setPermAddress] = useState({
     sub_district: "",

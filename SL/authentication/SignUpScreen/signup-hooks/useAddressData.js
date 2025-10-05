@@ -8,6 +8,8 @@ export const useAddressData = () => {
   const [permSubDistricts, setPermSubDistricts] = useState([]);
   const [addressLoading, setAddressLoading] = useState(true);
   const [addressError, setAddressError] = useState("");
+  const [workplaceDistricts, setWorkplaceDistricts] = useState([]);
+  const [workplaceSubDistricts, setWorkplaceSubDistricts] = useState([]);
 
   // Fetch provinces data on component mount
   useEffect(() => {
@@ -45,6 +47,9 @@ export const useAddressData = () => {
     } else if (type === "perm") {
       setPermDistricts([]);
       setPermSubDistricts([]);
+    } else if (type === "workplace") {
+      setWorkplaceDistricts([]);
+      setWorkplaceSubDistricts([]);
     }
   };
 
@@ -63,24 +68,37 @@ export const useAddressData = () => {
     if (type === "current") {
       setDistricts(districtList);
       setSubDistricts([]);
-    } else {
+    } else if (type === "perm") {
       setPermDistricts(districtList);
       setPermSubDistricts([]);
+    } else if (type === "workplace") {
+      setWorkplaceDistricts(districtList);
+      setWorkplaceSubDistricts([]);
     }
   };
 
-  // Handle district selection for current address
+  // Handle district selection
   const handleDistrictChange = (districtId, type = "current") => {
     if (!districtId) {
       if (type === "current") {
         setSubDistricts([]);
-      } else {
+      } else if (type === "perm") {
         setPermSubDistricts([]);
+      } else if (type === "workplace") {
+        setWorkplaceSubDistricts([]);
       }
       return;
     }
 
-    const districtList = type === "current" ? districts : permDistricts;
+    let districtList;
+    if (type === "current") {
+      districtList = districts;
+    } else if (type === "perm") {
+      districtList = permDistricts;
+    } else if (type === "workplace") {
+      districtList = workplaceDistricts;
+    }
+
     const district = districtList.find((d) => d.id === districtId);
     const subDistrictList = (district?.sub_districts || [])
       .slice()
@@ -88,23 +106,31 @@ export const useAddressData = () => {
 
     if (type === "current") {
       setSubDistricts(subDistrictList);
-    } else {
+    } else if (type === "perm") {
       setPermSubDistricts(subDistrictList);
+    } else if (type === "workplace") {
+      setWorkplaceSubDistricts(subDistrictList);
     }
   };
 
-  // Handle sub-district selection for current address
+  // Handle sub-district selection - FIXED VERSION
   const handleSubDistrictChange = (subDistrictId, type = "current") => {
     if (!subDistrictId) {
       return;
     }
 
-    const subDistrictList =
-      type === "current" ? subDistricts : permSubDistricts;
+    let subDistrictList;
+    if (type === "current") {
+      subDistrictList = subDistricts;
+    } else if (type === "perm") {
+      subDistrictList = permSubDistricts;
+    } else if (type === "workplace") {
+      subDistrictList = workplaceSubDistricts;
+    }
+
     const subDistrict = subDistrictList.find((s) => s.id === subDistrictId);
 
-    // Note: The actual zipcode setting is handled in the parent component
-    // This function mainly handles the selection logic
+    // Return the selected subDistrict so parent component can access zipcode
     return subDistrict;
   };
 
@@ -122,7 +148,13 @@ export const useAddressData = () => {
 
   // Get sub-districts by district name
   const getSubDistrictsByDistrictName = (districtName, type = "current") => {
-    const districtList = type === "current" ? districts : permDistricts;
+    const districtList =
+      type === "current"
+        ? districts
+        : type === "perm"
+        ? permDistricts
+        : workplaceDistricts;
+
     const district = districtList.find((d) => d.name_th === districtName);
     if (!district) return [];
 
@@ -136,7 +168,12 @@ export const useAddressData = () => {
   // Get zipcode by sub-district name
   const getZipcodeBySubDistrictName = (subDistrictName, type = "current") => {
     const subDistrictList =
-      type === "current" ? subDistricts : permSubDistricts;
+      type === "current"
+        ? subDistricts
+        : type === "perm"
+        ? permSubDistricts
+        : workplaceSubDistricts;
+
     const subDistrict = subDistrictList.find(
       (s) => s.name_th === subDistrictName
     );
@@ -163,8 +200,10 @@ export const useAddressData = () => {
 
     if (type === "current") {
       setDistricts(districtList);
-    } else {
+    } else if (type === "perm") {
       setPermDistricts(districtList);
+    } else if (type === "workplace") {
+      setWorkplaceDistricts(districtList);
     }
 
     // If district is specified, load sub-districts
@@ -179,8 +218,10 @@ export const useAddressData = () => {
 
         if (type === "current") {
           setSubDistricts(subDistrictList);
-        } else {
+        } else if (type === "perm") {
           setPermSubDistricts(subDistrictList);
+        } else if (type === "workplace") {
+          setWorkplaceSubDistricts(subDistrictList);
         }
       }
     }
@@ -193,6 +234,8 @@ export const useAddressData = () => {
     subDistricts,
     permDistricts,
     permSubDistricts,
+    workplaceDistricts,
+    workplaceSubDistricts,
     addressLoading,
     addressError,
 
@@ -201,6 +244,8 @@ export const useAddressData = () => {
     setSubDistricts,
     setPermDistricts,
     setPermSubDistricts,
+    setWorkplaceDistricts,
+    setWorkplaceSubDistricts,
     setAddressLoading,
     setAddressError,
 
