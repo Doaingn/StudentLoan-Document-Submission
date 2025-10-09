@@ -3,8 +3,6 @@ import { storage } from "../../../database/firebase";
 import * as Print from "expo-print";
 import * as FileSystem from "expo-file-system/legacy";
 
-// Upload file to Firebase Storage
-// fileUploadService.js - แก้ไขฟังก์ชัน uploadFileToStorage
 export const uploadFileToStorage = async (
   file,
   docId,
@@ -20,7 +18,6 @@ export const uploadFileToStorage = async (
       .replace(/[.#$[\]/\\]/g, "_")
       .replace(/\s+/g, "_");
 
-    // Use PDF extension for converted files, or original extension
     const fileExtension = file.convertedFromImage
       ? "pdf"
       : file.filename?.split(".").pop() || "unknown";
@@ -139,19 +136,50 @@ export const convertImageToPDF = async (
       <!DOCTYPE html>
       <html>
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-          @page { margin: 0; size: A4; }
-          body { margin: 0; padding: 0; width: 100%; height: 100%; }
-          img { max-width: 100%; max-height: 100%; object-fit: contain; }
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          @page {
+            margin: 0;
+            size: A4;
+          }
+          html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+          }
+          body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          img {
+            max-width: 100%;
+            max-height: 100vh;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            display: block;
+          }
         </style>
       </head>
-      <body><img src="${base64DataUri}" /></body>
+      <body>
+        <img src="${base64DataUri}" alt="Document Image" />
+      </body>
       </html>
     `;
 
     const { uri: pdfUri } = await Print.printToFileAsync({
       html: htmlContent,
       base64: false,
+      width: 595,
+      height: 842,
     });
 
     const pdfInfo = await FileSystem.getInfoAsync(pdfUri);
