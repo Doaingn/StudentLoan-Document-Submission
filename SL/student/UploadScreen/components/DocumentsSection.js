@@ -57,7 +57,7 @@ const DocumentsSection = ({
           "id_copies_student",
           "id_copies_father",
           "id_copies_mother",
-          "guardian_consent"
+          "guardian_consent",
         ];
       case "2":
       case "3":
@@ -520,15 +520,6 @@ const DocumentsSection = ({
   return (
     <View style={styles.documentsSection}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{getSectionTitle()}</Text>
-        {!aiBackendAvailable && AI_ENABLED_DOCUMENTS.length > 0 && (
-          <View style={styles.aiStatusWarning}>
-            <Ionicons name="warning-outline" size={16} color="#f59e0b" />
-            <Text style={styles.aiStatusText}>
-              ระบบ AI ตรวจสอบเอกสารไม่พร้อมใช้งาน
-            </Text>
-          </View>
-        )}
         {isProcessing() && (
           <View style={styles.processingWarning}>
             <ActivityIndicator size="small" color="#8b5cf6" />
