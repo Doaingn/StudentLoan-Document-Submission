@@ -10,10 +10,6 @@ const StatusOverview = ({ stats }) => {
           <Text style={styles.statusLabel}>อนุมัติแล้ว</Text>
         </View>
         <View style={styles.statusItem}>
-          <Text style={[styles.statusNumber, { color: "#8b5cf6" }]}>{stats.uploaded}</Text>
-          <Text style={styles.statusLabel}>อัปโหลดแล้ว</Text>
-        </View>
-        <View style={styles.statusItem}>
           <Text style={[styles.statusNumber, { color: "#f59e0b" }]}>{stats.pending}</Text>
           <Text style={styles.statusLabel}>รอตรวจสอบ</Text>
         </View>

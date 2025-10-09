@@ -15,11 +15,6 @@ const HeaderSection = ({ submissionData }) => {
       <Text style={styles.subtitle}>
         ส่งเมื่อ: {submittedDate}
       </Text>
-      {submissionData?.userId && (
-        <Text style={styles.userInfo}>
-          ผู้ส่ง: {submissionData.userEmail || submissionData.userId}
-        </Text>
-      )}
     </View>
   );
 };

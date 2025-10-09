@@ -28,22 +28,6 @@ const StatusBadge = ({ status }) => {
           text: "ไม่อนุมัติ",
           textColor: "#991b1b"
         };
-      case "under_review":
-        return {
-          color: "#3b82f6",
-          bgColor: "#dbeafe",
-          icon: "eye-outline",
-          text: "กำลังตรวจสอบ",
-          textColor: "#1e40af"
-        };
-      case "uploaded_to_storage":
-        return {
-          color: "#8b5cf6",
-          bgColor: "#ede9fe",
-          icon: "cloud-upload-outline",
-          text: "อัปโหลดแล้ว",
-          textColor: "#6d28d9"
-        };
       default:
         return {
           color: "#6b7280",
