@@ -116,7 +116,7 @@ const generateTerm1Documents = ({ familyStatus, fatherIncome, motherIncome, guar
         {
             id: "form_101",
             title: "แบบฟอร์ม กยศ.101",
-            description: "กรอกข้อมูลตามจริงให้ครบถ้วน ก่อนอัพโหลดเอกสาร",
+            description: "กรอกข้อมูลตามจริงให้ครบถ้วน เมื่ออัพโหลดกรุณาเลือก 4 รูปภาพตามลำดับ",
             required: true,
             canGenerate: true,
             needsAIValidation: true,
