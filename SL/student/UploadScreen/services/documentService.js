@@ -22,10 +22,10 @@ export const handleFileUpload = async (
   setIsValidatingAI
 ) => {
   try {
-    // FIX: ใช้ static import แทน dynamic import
+    // ใช้ static import แทน dynamic import
     const DocumentPicker = require("expo-document-picker");
 
-    // FIX: ใช้ getDocumentAsync โดยตรงจาก DocumentPicker
+    // ใช้ getDocumentAsync โดยตรงจาก DocumentPicker
     const result = await DocumentPicker.getDocumentAsync({
       type: [
         "image/*",
@@ -138,7 +138,7 @@ export const handleFileUpload = async (
                 delete newState[`${docId}_merge`];
                 return newState;
               });
-              return; // Don't add the file if validation fails
+              return;
             }
             console.log(`FORM 101 MERGED PDF - AI validation passed`);
           }
@@ -207,6 +207,7 @@ export const handleFileUpload = async (
         // AI validation
         const { needsAIValidation } = require("./aiValidationService");
         if (needsAIValidation(docId)) {
+          // SET STATE ก่อนเริ่มตรวจสอบ
           setIsValidatingAI((prev) => ({
             ...prev,
             [docId]: true,
@@ -249,7 +250,6 @@ export const handleFileUpload = async (
               return newState;
             });
 
-            // Clear อีกครั้งหลัง microtask
             await Promise.resolve();
             setIsValidatingAI((prev) => {
               const newState = { ...prev };
@@ -257,7 +257,6 @@ export const handleFileUpload = async (
               return newState;
             });
 
-            // Clear อีกครั้งหลัง delay สั้นๆ
             setTimeout(() => {
               setIsValidatingAI((prev) => {
                 const newState = { ...prev };
@@ -267,7 +266,6 @@ export const handleFileUpload = async (
             }, 50);
           }
 
-          // ถ้า validation ไม่ผ่าน ให้ skip ไฟล์นี้
           if (!validationResult) {
             continue;
           }
@@ -427,4 +425,9 @@ export const prepareSubmissionData = async (uploads, surveyData, appConfig) => {
     academicYear,
     term,
   };
+};
+
+// Helper function to check if AI validation is needed
+const needsAIValidation = (docId) => {
+  return docId === "form_101" || docId === "volunteer_doc";
 };
