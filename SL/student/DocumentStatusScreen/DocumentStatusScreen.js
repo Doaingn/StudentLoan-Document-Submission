@@ -12,7 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Print from "expo-print";
 import * as FileSystem from "expo-file-system/legacy";
 import { db, auth, storage } from "../../database/firebase";
-import { doc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, deleteDoc, onSnapshot } from "firebase/firestore";
 import {
   ref as storageRef,
   deleteObject,
@@ -75,6 +75,7 @@ const DocumentStatusScreen = ({ route, navigation }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [isConvertingToPDF, setIsConvertingToPDF] = useState({});
   const [storageUploadProgress, setStorageUploadProgress] = useState({});
+  const [hasNavigated, setHasNavigated] = useState(false);
 
   // AI related states - เหมือนกับ UploadScreen
   const [isValidatingAI, setIsValidatingAI] = useState({});
@@ -189,11 +190,11 @@ const DocumentStatusScreen = ({ route, navigation }) => {
           validationResult,
           docId,
           () => {
-            console.log(`✅ AI Validation passed for ${file.filename} (${docId})`);
+            console.log(`AI Validation passed for ${file.filename} (${docId})`);
             resolve(true);
           },
           () => {
-            console.log(`❌ AI Validation failed for ${file.filename} (${docId})`);
+            console.log(`AI Validation failed for ${file.filename} (${docId})`);
             resolve(false);
           }
         );
@@ -939,10 +940,60 @@ const DocumentStatusScreen = ({ route, navigation }) => {
     ));
   };
 
-  if (areAllDocumentsApproved()) {
-    return <LoanProcessStatus navigation={navigation} />;
-  }
+  // ใน DocumentStatusScreen.js ให้แก้ไขส่วนนี้
+useEffect(() => {
+  const currentUser = auth.currentUser;
+  if (!currentUser || !submissionData || hasNavigated) return;
 
+  const userRef = doc(db, "users", currentUser.uid);
+  
+  const unsubscribe = onSnapshot(userRef, (userDoc) => {
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      const loanHistory = userData.loanHistory || {};
+      const currentTerm = appConfig?.term;
+      
+      console.log("DocumentStatusScreen - LoanHistory update:", {
+        phase1Approved: loanHistory.phase1Approved,
+        disbursementSubmitted: loanHistory.disbursementSubmitted,
+        disbursementApproved: loanHistory.disbursementApproved,
+        lastDisbursementApprovedTerm: loanHistory.lastDisbursementApprovedTerm,
+        currentTerm
+      });
+      
+      // ตรวจสอบว่า disbursementApproved เป็นของเทอมปัจจุบัน
+      const isCurrentTermApproved = 
+        loanHistory.lastDisbursementApprovedTerm === currentTerm &&
+        loanHistory.disbursementApproved === true;
+      
+      // ไปหน้า LoanProcessStatus เฉพาะเมื่ออนุมัติในเทอมปัจจุบัน
+      if (isCurrentTermApproved && !hasNavigated) {
+        console.log("All disbursement documents approved for current term - navigating to LoanProcessStatus");
+        setHasNavigated(true);
+        navigation.replace("LoanProcessStatus");
+      }
+    }
+  });
+
+  return () => unsubscribe();
+}, [submissionData, navigation, hasNavigated, appConfig]);
+
+// แก้ไขส่วนเรนเดอร์ให้ตรวจสอบ phase ก่อนแสดง LoanProcessStatus
+if (areAllDocumentsApproved()) {
+  const currentPhase = submissionData?.phase || submissionData?.surveyData?.phase;
+  const loanHistory = submissionData?.loanHistory || {};
+  
+  // แสดง LoanProcessStatus เฉพาะเมื่อเป็น disbursement phase
+  if (currentPhase === "disbursement" || 
+      currentPhase === "disbursement_pending" ||
+      loanHistory.disbursementSubmitted === true) {
+    console.log("Showing LoanProcessStatus for disbursement phase");
+    return <LoanProcessStatus navigation={navigation} />;
+  } else {
+    console.log("Phase 1 approved - staying in DocumentStatusScreen");
+    // ยังคงแสดง DocumentStatusScreen แต่แสดงสถานะว่าอนุมัติแล้ว
+  }
+}
   // แสดง Loading Screen
   if (isLoading) {
     return <LoadingScreen />;
