@@ -370,7 +370,8 @@ const LoanProcessStatus = ({ navigation }) => {
           <Ionicons name="document-text" size={32} color="#3b82f6" />
           <Text style={styles.headerTitle}>สถานะการดำเนินการ</Text>
           <Text style={styles.headerSubtitle}>
-            ติดตามความคืบหน้าการประมวลผลเอกสารของคุณ
+            เอกสารของคุณอนุมัติแล้ว นำเอกสารไปส่งที่งานทุนการศึกษา และ
+            ติดตามความคืบหน้าการดำเนินการได้ที่หน้านี้
           </Text>
         </View>
 
