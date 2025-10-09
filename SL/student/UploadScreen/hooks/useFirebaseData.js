@@ -25,11 +25,9 @@ export const useFirebaseData = (
             setAppConfig(config);
             setAcademicYear(config.academicYear);
             setTerm(config.term);
-          } else {
-            console.warn("ไม่พบ config document");
           }
         } else {
-          const defaultConfig = { academicYear: "2567", term: "1" };
+          const defaultConfig = { academicYear: "2568", term: "1" };
           setAppConfig(defaultConfig);
           setAcademicYear(defaultConfig.academicYear);
           setTerm(defaultConfig.term);
@@ -45,7 +43,115 @@ export const useFirebaseData = (
     return () => configUnsubscribe();
   }, []);
 
-  // Load user data with term checking
+  // Initialize loan history if not exists
+  const initializeLoanHistory = async (userRef, currentYear, currentTerm) => {
+    try {
+      await updateDoc(userRef, {
+        loanHistory: {
+          currentPhase: "initial_application",
+          phase1Approved: false,
+          phase1ApprovedYear: null,
+          disbursementSubmitted: false,
+          disbursementApproved: false,
+          firstApplicationYear: currentYear,
+          firstApplicationTerm: currentTerm,
+          lastPhase1ApprovedTerm: null,
+          lastDisbursementSubmitTerm: null,
+          lastDisbursementApprovedTerm: null,
+          hasEverApplied: false,
+          hasCompletedPhase1Ever: false // ใหม่: เช็คว่าเคยทำ Phase 1 แล้วหรือยัง
+        }
+      });
+      
+      return {
+        currentPhase: "initial_application",
+        phase1Approved: false,
+        phase1ApprovedYear: null,
+        disbursementSubmitted: false,
+        disbursementApproved: false,
+        firstApplicationYear: currentYear,
+        firstApplicationTerm: currentTerm,
+        lastPhase1ApprovedTerm: null,
+        lastDisbursementSubmitTerm: null,
+        lastDisbursementApprovedTerm: null,
+        hasEverApplied: false,
+        hasCompletedPhase1Ever: false
+      };
+    } catch (error) {
+      console.error("Error initializing loan history:", error);
+      return null;
+    }
+  };
+
+  // ฟังก์ชันกำหนด Phase
+const determinePhase = (loanHistory, currentTerm, currentYear) => {
+  if (!loanHistory || typeof loanHistory !== 'object') {
+    console.log("loanHistory is null or invalid");
+    return { phase: "initial_application", reason: "no_loan_history" };
+  }
+
+  console.log("Determining phase:", { 
+    currentTerm,
+    currentYear,
+    hasCompletedPhase1Ever: loanHistory.hasCompletedPhase1Ever,
+    phase1ApprovedYear: loanHistory.phase1ApprovedYear,
+    lastDisbursementApprovedTerm: loanHistory.lastDisbursementApprovedTerm,
+    disbursementApproved: loanHistory.disbursementApproved
+  });
+  
+  // เช็คว่า disbursementApproved ของเทอมปัจจุบันหรือไม่
+  const isCurrentTermApproved = 
+    loanHistory.lastDisbursementApprovedTerm === currentTerm &&
+    loanHistory.lastDisbursementApprovedYear === currentYear &&
+    loanHistory.disbursementApproved === true;
+  
+  // ถ้าเอกสารเบิกเงินของเทอมปัจจุบันอนุมัติแล้ว → completed
+  if (isCurrentTermApproved) {
+    return { phase: "completed", reason: "current_term_approved" };
+  }
+  
+  // เช็คว่าส่งเอกสารเบิกเงินของเทอมปัจจุบันแล้วหรือยัง
+  const hasSubmittedCurrentTerm = 
+    loanHistory.lastDisbursementSubmitTerm === currentTerm &&
+    loanHistory.lastDisbursementSubmitYear === currentYear &&
+    loanHistory.disbursementSubmitted === true;
+  
+  if (hasSubmittedCurrentTerm) {
+    return { phase: "disbursement_pending", reason: "awaiting_approval" };
+  }
+  
+  // เทอม 2/3 หรือปีถัดไป ต้องอัพโหลดเอกสารเบิกเงิน
+  if (currentTerm === "2" || currentTerm === "3") {
+    return { phase: "disbursement", reason: "term_2_or_3" };
+  }
+  
+  // เทอม 1 - เช็คว่าเคยทำ Phase 1 ไปแล้วหรือยัง
+  if (currentTerm === "1") {
+    // เช็คว่าปีการศึกษาเปลี่ยนหรือไม่
+    const isNewYear = loanHistory.phase1ApprovedYear !== currentYear;
+    
+    // ถ้าเคยทำ Phase 1 ไปแล้วในอดีต (ไม่ว่าปีไหน) → ให้อัพโหลดเอกสารเบิกเงิน
+    if (loanHistory.hasCompletedPhase1Ever === true) {
+      console.log("User has completed Phase 1 before disbursement only");
+      return { phase: "disbursement", reason: "term1_phase1_already_done_lifetime" };
+    }
+    
+    // ถ้ายังไม่เคยทำ Phase 1 เลย → ต้องทำ Phase 1 ก่อน
+    if (!loanHistory.hasCompletedPhase1Ever) {
+      // เช็คว่าส่ง Phase 1 ไปแล้วหรือยัง
+      if (loanHistory.currentPhase === "initial_application" && 
+          !loanHistory.phase1Approved) {
+        return { phase: "initial_application_pending", reason: "awaiting_phase1_approval" };
+      }
+      
+      return { phase: "initial_application", reason: "first_time_applicant" };
+    }
+  }
+  
+  return { phase: "initial_application", reason: "fallback" };
+};
+
+  // ฟังก์ชัน loadUserData ที่ปรับปรุงแล้ว
   const loadUserData = async (currentConfig) => {
     const currentUser = auth.currentUser;
     if (!currentUser) return null;
@@ -55,85 +161,102 @@ export const useFirebaseData = (
       const userDoc = await getDoc(userRef);
 
       if (!userDoc.exists()) {
-        console.log("ไม่พบข้อมูล user");
         return handleNoUserData(currentConfig);
       }
 
       const userData = userDoc.data();
+      const currentTerm = currentConfig.term;
+      const currentYear = currentConfig.academicYear;
       
-      // เช็คเทอมปัจจุบันกับเทอมที่ submit ล่าสุด
-      const currentTerm = `${currentConfig.term}`;
-      const lastSubmissionTerm = userData.lastSubmissionTerm;
+      let loanHistory = userData.loanHistory;
       
-      console.log(`📊 Current term: ${currentTerm}, Last submission term: ${lastSubmissionTerm}`);
+      if (!loanHistory) {
+        loanHistory = await initializeLoanHistory(userRef, currentYear, currentTerm);
+      }
+      
+      // กำหนด phase ตามเงื่อนไขที่ชัดเจน
+      const { phase, reason } = determinePhase(loanHistory, currentTerm, currentYear);
+      console.log(`Determined phase: "${phase}" (reason: ${reason})`);
+      
+      // จัดการ birth_date
+      const birthDateFromUser = userData.birth_date;
+      setBirthDate(birthDateFromUser);
 
-      // ถ้าเทอมไม่ตรงกัน ให้ล้าง uploads
-      let uploadsToUse = {};
-      if (lastSubmissionTerm === currentTerm && userData.uploads) {
-        uploadsToUse = userData.uploads;
-        console.log(`✅ Loading uploads for current term ${currentTerm}`);
-      } else {
-        console.log(`🔄 Term changed or first upload - clearing uploads`);
-        // ล้าง uploads ใน Firebase
-        await updateDoc(userRef, {
-          uploads: {},
-        });
+      if (birthDateFromUser) {
+        const { calculateAge } = await import("../utils/helpers");
+        const age = calculateAge(birthDateFromUser);
+        setUserAge(age);
       }
 
-      // ดึงชั่วโมงจิตอาสาจาก Firebase
       const volunteerHoursFromFirebase = userData.volunteerHours || 0;
       setVolunteerHours(volunteerHoursFromFirebase);
-      console.log(`📊 Loaded volunteer hours from Firebase: ${volunteerHoursFromFirebase}`);
 
-      // สำหรับเทอม 2/3: ไม่จำเป็นต้องมี survey data
-      if (currentConfig.term === "2" || currentConfig.term === "3") {
-        console.log(`🎓 Term ${currentConfig.term}: Setting up without survey requirement`);
-
-        const birthDateFromUser = userData.birth_date;
-        setBirthDate(birthDateFromUser);
-
-        if (birthDateFromUser) {
-          const { calculateAge } = await import("../utils/helpers");
-          const age = calculateAge(birthDateFromUser);
-          setUserAge(age);
-          console.log(`👤 User age calculated: ${age} years`);
+      // จัดการ uploads ตาม phase
+      let uploadsToUse = {};
+      
+      // ถ้าเป็น disbursement phase และยังไม่ส่ง → ล้าง uploads เก่า
+      if (phase === "disbursement" && !loanHistory.disbursementSubmitted) {
+        console.log("Disbursement phase - clearing old uploads");
+        await updateDoc(userRef, { 
+          uploads: {},
+          lastUpdated: new Date().toISOString()
+        });
+      } 
+      // ถ้าส่งไปแล้ว หรือ pending → เก็บ uploads เดิม
+      else if (phase === "disbursement_pending" || 
+               phase === "initial_application_pending" ||
+               phase === "completed") {
+        uploadsToUse = userData.uploads || {};
+      } 
+      // Phase อื่นๆ
+      else {
+        const lastSubmissionTerm = userData.lastSubmissionTerm;
+        if (lastSubmissionTerm === currentTerm && userData.uploads) {
+          uploadsToUse = userData.uploads;
         }
+      }
 
+      // สร้าง surveyData ตาม phase
+      if (phase === "disbursement" || 
+          phase === "disbursement_pending" || 
+          phase === "completed") {
         return {
-          surveyData: { term: currentConfig.term },
+          surveyData: { 
+            term: currentTerm,
+            phase: phase === "disbursement_pending" ? "disbursement" : phase,
+            userId: currentUser.uid,
+            loanHistory: loanHistory,
+            birth_date: birthDateFromUser
+          },
+          surveyDocId: userDoc.id,
+          uploads: uploadsToUse,
+          volunteerHours: volunteerHoursFromFirebase,
+        };
+      }
+      
+      // Phase 1 - ต้องมี survey
+      const surveyData = userData.survey;
+      if (surveyData) {
+        return {
+          surveyData: { 
+            ...surveyData, 
+            term: currentTerm,
+            phase: phase === "initial_application_pending" ? "initial_application" : phase,
+            userId: currentUser.uid,
+            loanHistory: loanHistory
+          },
           surveyDocId: userDoc.id,
           uploads: uploadsToUse,
           volunteerHours: volunteerHoursFromFirebase,
         };
       } else {
-        // สำหรับเทอม 1: ต้องมี survey data
-        const surveyData = userData.survey;
-        if (surveyData) {
-          const birthDateData = userData.birth_date;
-          setBirthDate(birthDateData);
-
-          if (birthDateData) {
-            const { calculateAge } = await import("../utils/helpers");
-            const age = calculateAge(birthDateData);
-            setUserAge(age);
-            console.log(`👤 User age calculated: ${age} years`);
-          }
-
-          return {
-            surveyData: { ...surveyData, term: currentConfig.term },
-            surveyDocId: userDoc.id,
-            uploads: uploadsToUse,
-            volunteerHours: volunteerHoursFromFirebase,
-          };
-        } else {
-          console.log("❌ Term 1 requires survey data but none found");
-          return {
-            surveyData: null,
-            surveyDocId: null,
-            uploads: {},
-            volunteerHours: volunteerHoursFromFirebase,
-          };
-        }
+        console.log("Term 1 requires survey data but none found");
+        return {
+          surveyData: null,
+          surveyDocId: null,
+          uploads: {},
+          volunteerHours: volunteerHoursFromFirebase,
+        };
       }
     } catch (error) {
       console.error("Error loading user data:", error);
@@ -146,18 +269,20 @@ export const useFirebaseData = (
     }
   };
 
-  // Helper function for when no user data exists
   const handleNoUserData = (currentConfig) => {
-    if (currentConfig.term === "2" || currentConfig.term === "3") {
-      console.log(`🎓 Term ${currentConfig.term}: Creating minimal data without survey requirement`);
+    const currentTerm = currentConfig.term;
+    
+    if (currentTerm === "2" || currentTerm === "3") {
       return {
-        surveyData: { term: currentConfig.term },
+        surveyData: { 
+          term: currentTerm,
+          phase: "disbursement"
+        },
         surveyDocId: null,
         uploads: {},
         volunteerHours: 0,
       };
     } else {
-      console.log("❌ Term 1 requires user data but none found");
       return {
         surveyData: null,
         surveyDocId: null,
