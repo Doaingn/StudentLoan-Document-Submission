@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
 import { db } from "./database/firebase";
 import { useNavigate } from "react-router-dom";
-// นำเข้าไอคอนจาก react-icons
 import {
   MdNewspaper,
   MdSearch,
@@ -23,26 +22,10 @@ import {
 const POST_TYPES = ["ทั่วไป", "ทุนการศึกษา", "ชั่วโมงจิตอาสา", "จ้างงาน"];
 
 const TYPE_COLORS = {
-  ทั่วไป: {
-    bg: "#e3f2fd",
-    color: "#1976d2",
-    icon: MdAnnouncement,
-  },
-  ทุนการศึกษา: {
-    bg: "#f3e5f5",
-    color: "#7b1fa2",
-    icon: MdSchool,
-  },
-  ชั่วโมงจิตอาสา: {
-    bg: "#fff3e0",
-    color: "#e65100",
-    icon: MdFavorite,
-  },
-  จ้างงาน: {
-    bg: "#e8f5e9",
-    color: "#2e7d32",
-    icon: MdWork,
-  },
+  ทั่วไป: { bg: "#e3f2fd", color: "#1976d2", icon: MdAnnouncement },
+  ทุนการศึกษา: { bg: "#f3e5f5", color: "#7b1fa2", icon: MdSchool },
+  ชั่วโมงจิตอาสา: { bg: "#fff3e0", color: "#e65100", icon: MdFavorite },
+  จ้างงาน: { bg: "#e8f5e9", color: "#2e7d32", icon: MdWork },
 };
 
 export default function AllPostsScreen() {
@@ -59,10 +42,23 @@ export default function AllPostsScreen() {
       id: doc.id,
       ...doc.data(),
     }));
+
+    // แก้ไข: ตรวจสอบว่า createdAt เป็น Timestamp หรือไม่
     allPosts.sort((a, b) => {
       if (!a.createdAt || !b.createdAt) return 0;
-      return b.createdAt.toDate() - a.createdAt.toDate();
+
+      const dateA =
+        typeof a.createdAt.toDate === "function"
+          ? a.createdAt.toDate()
+          : new Date(a.createdAt);
+      const dateB =
+        typeof b.createdAt.toDate === "function"
+          ? b.createdAt.toDate()
+          : new Date(b.createdAt);
+
+      return dateB - dateA;
     });
+
     setPosts(allPosts);
     setLoading(false);
   };
@@ -83,10 +79,16 @@ export default function AllPostsScreen() {
       ?.toLowerCase()
       .includes(search.toLowerCase());
     const matchesType = typeFilter ? post.postType === typeFilter : true;
-    const matchesDate = dateFilter
-      ? post.createdAt?.toDate().toDateString() ===
-        new Date(dateFilter).toDateString()
-      : true;
+
+    // แก้ไข: ตรวจสอบ createdAt ก่อนใช้งาน
+    const matchesDate =
+      dateFilter && post.createdAt
+        ? (typeof post.createdAt.toDate === "function"
+            ? post.createdAt.toDate().toDateString()
+            : new Date(post.createdAt).toDateString()) ===
+          new Date(dateFilter).toDateString()
+        : !dateFilter;
+
     return matchesSearch && matchesType && matchesDate;
   });
 
@@ -135,7 +137,6 @@ export default function AllPostsScreen() {
         }
       `}</style>
 
-      {/* Filters Section */}
       <div style={styles.filterSection}>
         <div style={styles.filterRow}>
           <div style={styles.searchWrapper}>
@@ -159,14 +160,11 @@ export default function AllPostsScreen() {
               style={styles.select}
             >
               <option value="">ประเภททั้งหมด</option>
-              {POST_TYPES.map((type) => {
-                const typeInfo = TYPE_COLORS[type];
-                return (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                );
-              })}
+              {POST_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -194,7 +192,6 @@ export default function AllPostsScreen() {
           )}
         </div>
 
-        {/* Type Filter Badges */}
         <div style={styles.typeBadgesContainer}>
           {POST_TYPES.map((type) => {
             const typeInfo = TYPE_COLORS[type];
@@ -223,7 +220,6 @@ export default function AllPostsScreen() {
         </div>
       </div>
 
-      {/* Posts Content */}
       {loading ? (
         <div style={styles.loadingContainer}>
           <div style={styles.spinner}>
@@ -264,7 +260,6 @@ function PostCard({ post, onDelete }) {
 
   return (
     <div className="post-card" style={styles.postCard}>
-      {/* Type Badge */}
       <div
         style={{
           ...styles.typeLabel,
@@ -276,7 +271,6 @@ function PostCard({ post, onDelete }) {
         <span>{post.postType || "ทั่วไป"}</span>
       </div>
 
-      {/* Banner Image */}
       {post.bannerURL && (
         <div style={styles.bannerContainer}>
           <img
@@ -287,7 +281,6 @@ function PostCard({ post, onDelete }) {
         </div>
       )}
 
-      {/* Content */}
       <div style={styles.cardContent}>
         <h3 style={styles.postTitle}>{post.title}</h3>
 
@@ -300,7 +293,6 @@ function PostCard({ post, onDelete }) {
           }}
         />
 
-        {/* Media Preview */}
         {post.mediaURLs && post.mediaURLs.length > 0 && (
           <div style={styles.mediaContainer}>
             <MdImage style={styles.mediaIcon} />
@@ -318,7 +310,6 @@ function PostCard({ post, onDelete }) {
           </div>
         )}
 
-        {/* Document */}
         {post.documentURL && (
           <div style={styles.documentBadge}>
             <MdDescription size={18} />
@@ -326,12 +317,11 @@ function PostCard({ post, onDelete }) {
           </div>
         )}
 
-        {/* Footer */}
         <div style={styles.cardFooter}>
           <div style={styles.dateContainer}>
             <MdAccessTime size={16} style={{ color: "#94a3b8" }} />
             <span style={styles.dateText}>
-              {post.createdAt
+              {post.createdAt && typeof post.createdAt.toDate === "function"
                 ? new Date(post.createdAt.toDate()).toLocaleDateString(
                     "th-TH",
                     {
@@ -346,7 +336,6 @@ function PostCard({ post, onDelete }) {
             </span>
           </div>
 
-          {/* Menu */}
           <div style={styles.menuWrapper}>
             <button
               onClick={() => setMenuOpen(!menuOpen)}
@@ -395,62 +384,6 @@ const styles = {
     background: "linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)",
     fontFamily:
       "'Kanit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  },
-  headerSection: {
-    maxWidth: "1400px",
-    margin: "0 auto 2rem",
-    background: "white",
-    borderRadius: "20px",
-    padding: "2rem",
-    boxShadow: "0 10px 40px rgba(0,0,0,0.08)",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: "1.5rem",
-  },
-  header: {
-    fontSize: "2.5rem",
-    fontWeight: "700",
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    WebkitBackgroundClip: "text",
-    WebkitTextFillColor: "transparent",
-    margin: 0,
-    marginBottom: "0.5rem",
-    display: "flex",
-    alignItems: "center",
-    gap: "0.75rem",
-  },
-  headerIcon: {
-    fontSize: "2.5rem",
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    color: "#667eea",
-  },
-  subtitle: {
-    fontSize: "1rem",
-    color: "#64748b",
-    margin: 0,
-  },
-  statsContainer: {
-    display: "flex",
-    gap: "1rem",
-  },
-  statBox: {
-    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-    borderRadius: "15px",
-    padding: "1.5rem 2rem",
-    textAlign: "center",
-    color: "white",
-    minWidth: "120px",
-  },
-  statNumber: {
-    fontSize: "2.5rem",
-    fontWeight: "700",
-    marginBottom: "0.25rem",
-  },
-  statLabel: {
-    fontSize: "0.9rem",
-    opacity: 0.9,
   },
   filterSection: {
     maxWidth: "1400px",

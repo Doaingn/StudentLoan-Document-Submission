@@ -1,8 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { doc, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "./database/firebase";
+import { CKEditor } from "@ckeditor/ckeditor5-react";
+import ClassicEditor from "@ckeditor/ckeditor5-build-classic";
 
 export default function PostEditScreen() {
   const navigate = useNavigate();
@@ -12,6 +14,7 @@ export default function PostEditScreen() {
   const [newDocumentFile, setNewDocumentFile] = useState(null);
   const [newMediaFiles, setNewMediaFiles] = useState([]);
   const [newBanner, setNewBanner] = useState(null);
+  const editorRef = useRef(null);
 
   if (!post) return <p style={styles.errorText}>ไม่พบโพสต์</p>;
 
@@ -28,12 +31,12 @@ export default function PostEditScreen() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      let updatedPost = { ...post };
+      let updateData = {};
 
       // Upload new banner if selected
       if (newBanner) {
         const bannerURL = await handleFileUpload(newBanner, "banner");
-        updatedPost.bannerURL = bannerURL;
+        updateData.bannerURL = bannerURL;
       }
 
       // Upload new document if selected
@@ -42,8 +45,8 @@ export default function PostEditScreen() {
           newDocumentFile,
           "documents"
         );
-        updatedPost.documentURL = documentURL;
-        updatedPost.documentName = newDocumentFile.name;
+        updateData.documentURL = documentURL;
+        updateData.documentName = newDocumentFile.name;
       }
 
       // Upload new media files if selected
@@ -53,11 +56,27 @@ export default function PostEditScreen() {
           const url = await handleFileUpload(file, "media");
           newMediaURLs.push(url);
         }
-        updatedPost.mediaURLs = [...(post.mediaURLs || []), ...newMediaURLs];
+        updateData.mediaURLs = [...(post.mediaURLs || []), ...newMediaURLs];
+      }
+
+      // Add text fields that were edited
+      updateData.title = post.title;
+      updateData.description = post.description;
+
+      // Keep existing data that might have been removed
+      if (post.bannerURL === null && !newBanner) {
+        updateData.bannerURL = null;
+      }
+      if (post.documentURL === null && !newDocumentFile) {
+        updateData.documentURL = null;
+        updateData.documentName = null;
+      }
+      if (post.mediaURLs && !newMediaFiles.length) {
+        updateData.mediaURLs = post.mediaURLs;
       }
 
       const docRef = doc(db, "news", post.id);
-      await updateDoc(docRef, updatedPost);
+      await updateDoc(docRef, updateData);
 
       alert("บันทึกสำเร็จ");
       navigate(-1);
@@ -153,12 +172,63 @@ export default function PostEditScreen() {
 
       <div style={styles.field}>
         <label style={styles.label}>รายละเอียด (HTML allowed)</label>
-        <textarea
-          value={post.description || ""}
-          onChange={(e) => handleChange("description", e.target.value)}
-          rows={6}
-          style={styles.textarea}
-        />
+        <div style={styles.editorContainer}>
+          <CKEditor
+            editor={ClassicEditor}
+            data={post.description || ""}
+            config={{
+              toolbar: [
+                "heading",
+                "|",
+                "bold",
+                "italic",
+                "link",
+                "bulletedList",
+                "numberedList",
+                "|",
+                "blockQuote",
+                "insertTable",
+                "|",
+                "undo",
+                "redo",
+              ],
+              heading: {
+                options: [
+                  {
+                    model: "paragraph",
+                    title: "Paragraph",
+                    class: "ck-heading_paragraph",
+                  },
+                  {
+                    model: "heading1",
+                    view: "h1",
+                    title: "Heading 1",
+                    class: "ck-heading_heading1",
+                  },
+                  {
+                    model: "heading2",
+                    view: "h2",
+                    title: "Heading 2",
+                    class: "ck-heading_heading2",
+                  },
+                  {
+                    model: "heading3",
+                    view: "h3",
+                    title: "Heading 3",
+                    class: "ck-heading_heading3",
+                  },
+                ],
+              },
+            }}
+            onChange={(event, editor) => {
+              const data = editor.getData();
+              handleChange("description", data);
+            }}
+            onReady={(editor) => {
+              editorRef.current = editor;
+            }}
+          />
+        </div>
       </div>
 
       {/* Document Section */}
@@ -304,16 +374,6 @@ const styles = {
     borderRadius: 8,
     boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
   },
-  textarea: {
-    width: "100%",
-    padding: 12,
-    fontSize: 16,
-    border: "1px solid #ccc",
-    borderRadius: 8,
-    boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
-    resize: "vertical",
-    fontFamily: "Arial, sans-serif",
-  },
   fileInput: {
     display: "block",
     marginBottom: 10,
@@ -421,6 +481,11 @@ const styles = {
     fontSize: 16,
     color: "#555",
     fontStyle: "italic",
+  },
+  editorContainer: {
+    border: "1px solid #ccc",
+    borderRadius: 8,
+    overflow: "hidden",
   },
   buttonContainer: {
     display: "flex",
