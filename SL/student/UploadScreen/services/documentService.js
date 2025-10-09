@@ -4,7 +4,6 @@ import { mergeImagesToPdf } from "../utils/pdfMerger";
 import {
   convertImageToPDF,
   isImageFile,
-  uploadFileToStorage,
 } from "./fileUploadService";
 import { performAIValidation } from "./aiValidationService";
 import { saveUploadsToFirebase } from "./firebaseService";
@@ -78,7 +77,7 @@ export const handleFileUpload = async (
         // AI validation for non-image files
         if (needsAIValidation(docId)) {
           console.log(
-            `🔥 FORM 101 NON-IMAGE - Starting AI validation for ${file.name}...`
+            `FORM 101 NON-IMAGE - Starting AI validation for ${file.name}...`
           );
           const isValid = await performAIValidation(
             fileWithMetadata,
@@ -91,12 +90,12 @@ export const handleFileUpload = async (
           );
           if (!isValid) {
             console.log(
-              `❌ FORM 101 NON-IMAGE - AI validation failed for ${file.name}`
+              `FORM 101 NON-IMAGE - AI validation failed for ${file.name}`
             );
             continue; // Skip this file if validation fails
           }
           console.log(
-            `✅ FORM 101 NON-IMAGE - AI validation passed for ${file.name}`
+            `FORM 101 NON-IMAGE - AI validation passed for ${file.name}`
           );
         }
 
@@ -112,7 +111,7 @@ export const handleFileUpload = async (
 
         try {
           console.log(
-            `🔥 FORM 101 IMAGES - Merging ${imagesToProcess.length} images to PDF...`
+            `FORM 101 IMAGES - Merging ${imagesToProcess.length} images to PDF...`
           );
           const mergedPdfFile = await mergeImagesToPdf(
             files,
@@ -122,7 +121,7 @@ export const handleFileUpload = async (
 
           // AI validation for the merged PDF
           if (needsAIValidation(docId)) {
-            console.log(`🔥 FORM 101 MERGED PDF - Starting AI validation...`);
+            console.log(`FORM 101 MERGED PDF - Starting AI validation...`);
             const isValid = await performAIValidation(
               mergedPdfFile,
               docId,
@@ -133,7 +132,7 @@ export const handleFileUpload = async (
               setIsValidatingAI
             );
             if (!isValid) {
-              console.log(`❌ FORM 101 MERGED PDF - AI validation failed`);
+              console.log(`FORM 101 MERGED PDF - AI validation failed`);
               setIsConvertingToPDF((prev) => {
                 const newState = { ...prev };
                 delete newState[`${docId}_merge`];
@@ -141,7 +140,7 @@ export const handleFileUpload = async (
               });
               return; // Don't add the file if validation fails
             }
-            console.log(`✅ FORM 101 MERGED PDF - AI validation passed`);
+            console.log(`FORM 101 MERGED PDF - AI validation passed`);
           }
 
           processedFiles.push(mergedPdfFile);
@@ -178,7 +177,6 @@ export const handleFileUpload = async (
         };
 
         if (isImageFile(file.mimeType, file.name)) {
-          // ❌ เอาการ clear state ออกจากที่นี่ เพราะจะทำใน finally ของ convertImageToPDF แล้ว
           try {
             const convertedPdf = await convertImageToPDF(
               file,
@@ -209,7 +207,6 @@ export const handleFileUpload = async (
         // AI validation
         const { needsAIValidation } = require("./aiValidationService");
         if (needsAIValidation(docId)) {
-          // 🔥 SET STATE ก่อนเริ่มตรวจสอบ
           setIsValidatingAI((prev) => ({
             ...prev,
             [docId]: true,
@@ -229,28 +226,26 @@ export const handleFileUpload = async (
             );
 
             console.log(
-              `🔍 Validation result for ${docId}: ${validationResult}`
+              `Validation result for ${docId}: ${validationResult}`
             );
 
             if (!validationResult) {
               console.log(
-                `❌ AI validation failed for ${docId}, skipping file`
+                `AI validation failed for ${docId}, skipping file`
               );
             } else {
-              console.log(`✅ AI validation passed for ${docId}`);
+              console.log(`AI validation passed for ${docId}`);
             }
           } catch (error) {
-            console.error(`❌ AI validation error for ${docId}:`, error);
+            console.error(`AI validation error for ${docId}:`, error);
             validationResult = false;
           } finally {
-            // 🔥🔥🔥 FORCE CLEAR STATE ใน finally block เพื่อให้แน่ใจว่าจะถูก clear เสมอ
-            console.log(`🧹 Force clearing validation state for ${docId}`);
+            console.log(`Force clearing validation state for ${docId}`);
 
-            // Clear หลายครั้งเพื่อให้แน่ใจ
             setIsValidatingAI((prev) => {
               const newState = { ...prev };
               delete newState[docId];
-              console.log(`🧹 State after clear:`, Object.keys(newState));
+              console.log(`State after clear:`, Object.keys(newState));
               return newState;
             });
 
@@ -311,16 +306,16 @@ export const handleFileUpload = async (
       setUploads(newUploads);
       await saveUploadsToFirebase(newUploads);
       console.log(
-        `✅ Successfully added ${processedFiles.length} files for ${docId}`
+        `Successfully added ${processedFiles.length} files for ${docId}`
       );
     } else {
       console.log(
-        `❌ No files were added for ${docId} - all validations failed or user cancelled`
+        `No files were added for ${docId} - all validations failed or user cancelled`
       );
     }
 
-    // ✅ FORCE CLEAR ทุก state ที่เกี่ยวข้องกับ docId
-    console.log("🧹 FINAL CLEANUP - Clearing all states for", docId);
+    // FORCE CLEAR ทุก state ที่เกี่ยวข้องกับ docId
+    console.log("FINAL CLEANUP - Clearing all states for", docId);
     setIsValidatingAI((prev) => {
       const newState = { ...prev };
       delete newState[docId];
@@ -335,12 +330,12 @@ export const handleFileUpload = async (
           delete newState[key];
         }
       });
-      console.log("🧹 Final state keys after cleanup:", Object.keys(newState));
+      console.log("Final state keys after cleanup:", Object.keys(newState));
       return newState;
     });
   } catch (error) {
-    // ✅ FORCE CLEAR state ใน catch block ด้วย
-    console.log("🧹 ERROR CLEANUP - Clearing all states for", docId);
+    // FORCE CLEAR state ใน catch block ด้วย
+    console.log("ERROR CLEANUP - Clearing all states for", docId);
 
     setIsValidatingAI((prev) => {
       const newState = { ...prev };
@@ -394,8 +389,20 @@ export const prepareSubmissionData = async (uploads, surveyData, appConfig) => {
     console.error("Error fetching user data:", error);
   }
 
+  // ใช้ค่าจาก appConfig โดยตรง
   const academicYear = appConfig?.academicYear || "2568";
   const term = appConfig?.term || "1";
+
+  // ดึง phase จาก surveyData หรือ appConfig
+  const phase = surveyData?.phase || "initial_application";
+
+  console.log(`Preparing submission:`, {
+    academicYear,
+    term,
+    phase,
+    studentId,
+    studentName
+  });
 
   const submissionData = {
     userId: currentUser.uid ?? null,
@@ -409,6 +416,7 @@ export const prepareSubmissionData = async (uploads, surveyData, appConfig) => {
     academicYear: academicYear ?? null,
     term: term ?? null,
     submissionTerm: `${term}` ?? null,
+    phase: phase ?? null,
     documentStatuses: {},
   };
 
@@ -419,9 +427,4 @@ export const prepareSubmissionData = async (uploads, surveyData, appConfig) => {
     academicYear,
     term,
   };
-};
-
-// Helper function to check if AI validation is needed
-const needsAIValidation = (docId) => {
-  return docId === "form_101" || docId === "volunteer_doc";
 };
