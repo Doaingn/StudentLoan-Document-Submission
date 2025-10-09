@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { ScrollView, StyleSheet, Alert } from "react-native";
 import { db, auth } from "../../database/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot,updateDoc } from "firebase/firestore";
 
 // Import hooks
 import { useUploadScreen } from "./hooks/useUploadScreen";
@@ -14,7 +14,6 @@ import {
   deleteSurveyData,
   submitDocumentsToFirebase,
 } from "./services/firebaseService";
-import { checkAIBackendStatus } from "./services/aiValidationService";
 import { handleFileUpload } from "./services/documentService";
 import { uploadFileToStorage } from "./services/fileUploadService";
 
@@ -121,155 +120,320 @@ const UploadScreen = ({ navigation, route }) => {
     handleRemoveFile,
   } = useFileManagement(setUploads, setVolunteerHours, uploads);
 
-  // Merge local isConvertingToPDF with hook's isConvertingToPDF
-  useEffect(() => {
-    setIsConvertingToPDF((prev) => {
-      // merge state
-      const merged = { ...prev, ...localIsConvertingToPDF };
+  // ฟังก์ชันตรวจสอบ phase ปัจจุบัน
+const checkCurrentPhase = async () => {
+  try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return null;
 
-      // ถ้า local ลบ key ออกไปแล้ว ให้ global ลบตามด้วย
-      Object.keys(merged).forEach((key) => {
-        if (!(key in localIsConvertingToPDF)) {
-          delete merged[key];
-        }
-      });
-
-      return merged;
-    });
-  }, [localIsConvertingToPDF]);
-  // Calculate volunteer hours when uploads change
-  useEffect(() => {
-    if (uploads.volunteer_doc) {
-      const initialHours = calculateVolunteerHoursFromUploads(uploads);
-      setVolunteerHours(initialHours);
-      console.log(`🔄 Initial volunteer hours calculated: ${initialHours}`);
+    const userRef = doc(db, "users", currentUser.uid);
+    const userDoc = await getDoc(userRef);
+    
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      return userData.loanHistory || {};
     }
-  }, [uploads.volunteer_doc]);
+    return null;
+  } catch (error) {
+    console.error("Error checking current phase:", error);
+    return null;
+  }
+};
 
-  // Check AI backend status on component mount
-  useEffect(() => {
-    const checkAIStatus = async () => {
-      const isAvailable = await checkAIBackendStatus();
-      setAiBackendAvailable(isAvailable);
-      if (!isAvailable) {
-        console.warn("AI backend is not available");
-      }
-    };
-    checkAIStatus();
-  }, []);
 
-  // Check submission status and load data when config is loaded
-  useEffect(() => {
-    const initializeData = async () => {
-      if (!configLoaded) return;
+// เพิ่มฟังก์ชันตรวจสอบและรีเซ็ต uploads เมื่อเทอมเปลี่ยน
+const checkAndResetForNewTerm = async (currentTerm, appConfig) => {
+  try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return false;
 
-      setIsLoading(true);
+    const userRef = doc(db, "users", currentUser.uid);
+    const userDoc = await getDoc(userRef);
+    
+    if (!userDoc.exists()) return false;
+    
+    const userData = userDoc.data();
+    const lastSubmissionTerm = userData.lastSubmissionTerm;
+    const lastAcademicYear = userData.lastAcademicYear;
+    
+    const currentAcademicYear = appConfig?.academicYear || "2568";
+    
+    console.log("Term Detection:", {
+      lastSubmissionTerm,
+      currentTerm,
+      lastAcademicYear,
+      currentAcademicYear
+    });
+    
+    // ตรวจสอบว่าเปลี่ยนเทอมหรือปีการศึกษา
+    const isNewTerm = lastSubmissionTerm !== currentTerm;
+    const isNewYear = lastAcademicYear !== currentAcademicYear;
+    
+    if (isNewTerm || isNewYear) {
+      console.log("New term/year detected - clearing uploads only");
+      
+      // ล้างแค่ uploads และ hasSubmittedDocuments
+      // ไม่ต้องอัพเดท lastSubmissionTerm (จะอัพเดทตอนส่งเอกสารจริง)
+      await updateDoc(userRef, {
+        uploads: {},
+        hasSubmittedDocuments: false,
+        lastUpdated: new Date().toISOString()
+      });
+      
+      return true; // บอกว่ามีการรีเซ็ต
+    }
+    
+    return false; // ไม่ได้รีเซ็ต
+  } catch (error) {
+    console.error("Error checking term change:", error);
+    return false;
+  }
+};
 
-      // Check submission status first
-      const hasSubmission = await checkSubmissionStatus(appConfig, navigation);
-      if (hasSubmission) {
-        setIsLoading(false);
-        return;
-      }
+useEffect(() => {
+  const initializeData = async () => {
+    if (!configLoaded) return;
 
-      // Load user data
-      const userData = await loadUserData(appConfig);
-      if (userData) {
-        setSurveyData(userData.surveyData);
-        setSurveyDocId(userData.surveyDocId);
+    setIsLoading(true);
 
-        // Convert old uploads format to new format if needed
-        if (userData.uploads) {
-          const convertedUploads = {};
-          Object.keys(userData.uploads).forEach((docId) => {
-            const upload = userData.uploads[docId];
-            if (Array.isArray(upload)) {
-              convertedUploads[docId] = upload;
-            } else {
-              // Convert single file to array format
-              convertedUploads[docId] = [upload];
-            }
-          });
-          setUploads(convertedUploads);
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      const userRef = doc(db, "users", currentUser.uid);
+      const userDoc = await getDoc(userRef);
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const loanHistory = userData.loanHistory || {};
+        
+        // ตรวจสอบว่า disbursementApproved เป็นของเทอมปัจจุบันหรือเทอมเก่า
+        const lastDisbursementTerm = loanHistory.lastDisbursementApprovedTerm;
+        const isCurrentTermApproved = lastDisbursementTerm === term;
+        
+        console.log("Checking disbursement approval:", {
+          disbursementApproved: loanHistory.disbursementApproved,
+          lastDisbursementTerm,
+          currentTerm: term,
+          isCurrentTermApproved
+        });
+        
+        // เงื่อนไข 1: ถ้าอนุมัติครบทุกอย่างแล้ว AND เป็นเทอมเดียวกันเท่านั้น
+        if (loanHistory.disbursementApproved === true && isCurrentTermApproved) {
+          console.log("All approved for current term, showing loan process status");
+          navigation.replace("LoanProcessStatus");
+          setIsLoading(false);
+          return;
+        }
+        
+        // เงื่อนไข 2: ถ้าส่งเอกสารเบิกเงินแล้ว AND เป็นเทอมเดียวกัน รอผล
+        const lastSubmitTerm = loanHistory.lastDisbursementSubmitTerm;
+        const isCurrentTermSubmitted = lastSubmitTerm === term;
+        
+        if (loanHistory.disbursementSubmitted === true && 
+            isCurrentTermSubmitted &&
+            loanHistory.disbursementApproved !== true) {
+          console.log("Disbursement submitted for current term, awaiting approval");
+          navigation.replace("DocumentStatusScreen");
+          setIsLoading(false);
+          return;
+        }
+        
+        // เทอม 2/3 - แสดงหน้าอัพโหลดเอกสารเบิกเงิน
+        if (term === "2" || term === "3") {
+          console.log(`Term ${term} - Loading disbursement documents`);
+          
+          // ตรวจสอบว่าเคยส่งเอกสารเบิกเงินในเทอมนี้แล้วหรือยัง
+          if (loanHistory.disbursementSubmitted === true && 
+              loanHistory.lastDisbursementSubmitTerm === term) {
+            console.log("Already submitted disbursement for this term - showing status");
+            navigation.replace("DocumentStatusScreen");
+            setIsLoading(false);
+            return;
+          }
+          
+          // ยังไม่ได้ส่ง - โหลดหน้าอัพโหลดปกติ
+          const userData = await loadUserData(appConfig);
+          if (userData) {
+            setSurveyData(userData.surveyData);
+            setSurveyDocId(userData.surveyDocId);
+            setUploads(userData.uploads || {});
+          }
+          setIsLoading(false);
+          return;
+        }
+        
+        // เงื่อนไข 4: เทอม 1 - ตรวจสอบ Phase 1
+        const lastPhase1Term = loanHistory.lastPhase1ApprovedTerm;
+        const isPhase1CurrentTerm = lastPhase1Term === term;
+        
+        if (term === "1" && 
+            loanHistory.phase1Approved === true && 
+            isPhase1CurrentTerm &&
+            loanHistory.disbursementSubmitted !== true) {
+          console.log("Phase 1 approved for current term, ready for disbursement");
+          
+          setUploads({});
+          setStorageUploadProgress({});
+          setUploadProgress({});
+          
+          const userData = await loadUserData(appConfig);
+          if (userData) {
+            setSurveyData(userData.surveyData);
+            setSurveyDocId(userData.surveyDocId);
+            setUploads(userData.uploads || {});
+          }
+          setIsLoading(false);
+          return;
         }
       }
+    }
 
+    // เช็ค submission status ปกติ
+    const hasSubmission = await checkSubmissionStatus(appConfig, navigation);
+    if (hasSubmission) {
       setIsLoading(false);
-    };
-
-    initializeData();
-  }, [configLoaded, appConfig]);
-
-  // Document List Generator
-  useEffect(() => {
-    console.log(`🔧 Document Generator useEffect triggered`);
-    console.log(`🔧 Current values:`, {
-      term,
-      academicYear,
-      birthDate: birthDate ? "present" : "missing",
-      birthDateType: typeof birthDate,
-      surveyData: surveyData ? "present" : "missing",
-    });
-
-    // สำหรับเทอม 2/3: ใช้ birthDate และ term ในการสร้างรายการ
-    if (term === "2" || term === "3") {
-      console.log(`🎓 Generating documents for Term ${term}`);
-
-      const docs = generateDocumentsList({
-        term: term,
-        academicYear: academicYear,
-        birth_date: birthDate,
-      });
-
-      setDocuments(docs);
-      console.log(`📋 Generated ${docs.length} documents for Term ${term}`);
-      console.log(
-        `📋 Documents list:`,
-        docs.map((d) => ({
-          id: d.id,
-          title: d.title,
-          required: d.required,
-        }))
-      );
-
       return;
     }
 
-    // สำหรับเทอม 1: ต้องมีข้อมูลที่จำเป็นครบถ้วน
-    else if (surveyData && term && academicYear && birthDate) {
-      console.log(
-        `🎓 Generating documents for Term ${term} with full survey data`
-      );
+    // Load user data สำหรับกรณีปกติ
+    const userData = await loadUserData(appConfig);
+    if (userData) {
+      setSurveyData(userData.surveyData);
+      setSurveyDocId(userData.surveyDocId);
 
-      const docs = generateDocumentsList({
-        ...surveyData,
-        term: term,
-        academicYear: academicYear,
-        birth_date: birthDate,
-      });
-
-      setDocuments(docs);
-      console.log(`📋 Generated ${docs.length} documents for Term ${term}`);
-      console.log(
-        `📋 Documents list:`,
-        docs.map((d) => ({
-          id: d.id,
-          title: d.title,
-          required: d.required,
-        }))
-      );
-    } else if (!surveyData && term === "1") {
-      console.log(`❌ Term 1 without survey data - clearing document list`);
-      setDocuments([]);
-    } else {
-      console.log(`⏳ Waiting for required data...`, {
-        hasSurveyData: !!surveyData,
-        hasTerm: !!term,
-        hasAcademicYear: !!academicYear,
-        hasBirthDate: !!birthDate,
-      });
+      if (userData.uploads) {
+        const convertedUploads = {};
+        Object.keys(userData.uploads).forEach((docId) => {
+          const upload = userData.uploads[docId];
+          if (Array.isArray(upload)) {
+            convertedUploads[docId] = upload;
+          } else {
+            convertedUploads[docId] = [upload];
+          }
+        });
+        setUploads(convertedUploads);
+      }
     }
-  }, [surveyData, term, academicYear, birthDate]);
+
+    setIsLoading(false);
+  };
+
+  initializeData();
+}, [configLoaded, appConfig, term]);
+
+  // Document List Generator
+  useEffect(() => {
+  console.log(`🔧 Document Generator useEffect triggered`);
+  console.log(`🔧 Current values:`, {
+    term,
+    academicYear,
+    birthDate: birthDate ? "present" : "missing",
+    surveyData: surveyData ? "present" : "missing",
+    phase: surveyData?.phase // เช็คค่า phase
+  });
+
+  // สำหรับเทอม 2/3: ใช้ birthDate และ term ในการสร้างรายการ
+  if (term === "2" || term === "3") {
+    console.log(`Generating documents for Term ${term}`);
+
+    const docs = generateDocumentsList({
+      term: term,
+      academicYear: academicYear,
+      birth_date: birthDate,
+      phase: "disbursement"
+    });
+
+    setDocuments(docs);
+    console.log(`Generated ${docs.length} documents for Term ${term}`);
+    return;
+  }
+
+  // สำหรับเทอม 1: ต้องมี surveyData
+  if (surveyData && term && academicYear && birthDate) {
+    console.log(`Generating documents for Term ${term} with survey data`);
+    console.log(`Phase from surveyData: ${surveyData.phase}`); // ต้องเป็น "disbursement"
+
+    const docs = generateDocumentsList({
+      ...surveyData,
+      term: term,
+      academicYear: academicYear,
+      birth_date: birthDate,
+    });
+
+    setDocuments(docs);
+    console.log(`Generated ${docs.length} documents`);
+  } else if (!surveyData && term === "1") {
+    console.log(`Term 1 without survey data - clearing document list`);
+    setDocuments([]);
+  }
+}, [surveyData, term, academicYear, birthDate]);
+
+useEffect(() => {
+  const currentUser = auth.currentUser;
+  if (!currentUser) return;
+
+  const userRef = doc(db, "users", currentUser.uid);
+  
+  let hasShownAlert = false;
+  let debounceTimer = null;
+  
+  const unsubscribe = onSnapshot(userRef, async (userDoc) => {
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      const loanHistory = userData.loanHistory || {};
+      
+      if (debounceTimer) clearTimeout(debounceTimer);
+      
+      debounceTimer = setTimeout(async () => {
+        // ตรวจสอบว่าการอนุมัติเป็นของเทอมปัจจุบันหรือไม่
+        const lastDisbursementTerm = loanHistory.lastDisbursementApprovedTerm;
+        const lastSubmitTerm = loanHistory.lastDisbursementSubmitTerm;
+        const isCurrentTermApproved = lastDisbursementTerm === term;
+        const isCurrentTermSubmitted = lastSubmitTerm === term;
+        
+        console.log("Real-time update check:", {
+          currentTerm: term,
+          lastDisbursementTerm,
+          lastSubmitTerm,
+          isCurrentTermApproved,
+          isCurrentTermSubmitted
+        });
+        
+        // แสดง Alert เฉพาะเมื่อเปลี่ยนเป็น disbursement phase และเป็นเทอมปัจจุบัน
+        if (loanHistory.phase1Approved === true && 
+            loanHistory.currentPhase === "disbursement" &&
+            loanHistory.disbursementSubmitted !== true &&
+            loanHistory.lastPhase1ApprovedTerm === term &&
+            !hasShownAlert) {
+          
+          console.log("Showing approval alert for disbursement phase");
+          hasShownAlert = true;
+          
+          Alert.alert(
+            "เอกสารเฟส 1 ได้รับการอนุมัติแล้ว!",
+            "คุณสามารถอัพโหลดเอกสารเบิกเงิน (เฟส 2) ได้แล้ว",
+            [{ text: "ตกลง" }]
+          );
+        }
+        
+        // Navigation logic - ต้องตรวจสอบว่าเป็นเทอมปัจจุบัน
+        if (loanHistory.disbursementSubmitted === true && 
+            isCurrentTermSubmitted &&
+            loanHistory.disbursementApproved !== true) {
+          navigation.replace("DocumentStatusScreen");
+        }
+        
+        if (loanHistory.disbursementApproved === true && isCurrentTermApproved) {
+          navigation.replace("LoanProcessStatus");
+        }
+      }, 1000);
+    }
+  });
+
+  return () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    unsubscribe();
+  };
+}, [appConfig, navigation, term]);
 
   // Handle retake survey
   const handleRetakeSurvey = () => {
@@ -450,10 +614,14 @@ const UploadScreen = ({ navigation, route }) => {
       ]);
     } catch (error) {
       console.error("Error submitting documents:", error);
-      Alert.alert(
-        "เกิดข้อผิดพลาด",
-        `ไม่สามารถส่งเอกสารได้: ${error.message}\nกรุณาลองใหม่อีกครั้ง`
-      );
+      let errorMessage = "ไม่สามารถส่งเอกสารได้ กรุณาลองใหม่อีกครั้ง";
+      if (error.message.includes('Network request failed')) {
+        errorMessage = "การเชื่อมต่ออินเทอร์เน็ตมีปัญหา กรุณาตรวจสอบสัญญาณและลองอีกครั้ง";
+      } else if (error.message.includes('timeout')) {
+        errorMessage = "การอัปโหลดใช้เวลานานเกินไป กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต";
+      }
+      
+      Alert.alert("เกิดข้อผิดพลาด", `${errorMessage}\n\nข้อผิดพลาด: ${error.message}`);
     } finally {
       setIsSubmitting(false);
       setStorageUploadProgress({});
