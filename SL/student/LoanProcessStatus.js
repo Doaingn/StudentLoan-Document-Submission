@@ -20,6 +20,7 @@ const LoanProcessStatus = ({ navigation }) => {
   const [appConfig, setAppConfig] = useState(null);
   const [academicYear, setAcademicYear] = useState(null);
   const [term, setTerm] = useState(null);
+  const [hasValidData, setHasValidData] = useState(false);
 
   const processSteps = [
     {
@@ -122,6 +123,51 @@ const LoanProcessStatus = ({ navigation }) => {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+  const configRef = doc(db, "DocumentService", "config");
+  
+  const unsubscribe = onSnapshot(configRef, (docSnap) => {
+    if (docSnap.exists()) {
+      const config = docSnap.data();
+      const currentTerm = config.term;
+      const currentAcademicYear = config.academicYear;
+      
+      // เฉพาะเมื่อไม่มี processStatus และเป็นเทอม 2/3
+      if ((currentTerm === "2" || currentTerm === "3") && !processStatus && !isLoading) {
+        console.log(`Term ${currentTerm} - No process status data, checking user data`);
+        
+        const checkUserData = async () => {
+          const userId = auth.currentUser?.uid;
+          if (!userId) return;
+          
+          const userRef = doc(db, "users", userId);
+          const userDoc = await getDoc(userRef);
+          
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            const lastSubmissionTerm = userData.lastSubmissionTerm;
+            const lastAcademicYear = userData.lastAcademicYear;
+            const loanHistory = userData.loanHistory || {};
+            
+            // ตรวจสอบว่าเทอมเปลี่ยนจริงๆ และยังไม่ได้ส่งเอกสารในเทอมนี้
+            const isTermChanged = lastSubmissionTerm !== currentTerm || lastAcademicYear !== currentAcademicYear;
+            const hasSubmittedInCurrentTerm = loanHistory.lastDisbursementSubmitTerm === currentTerm;
+            
+            if (isTermChanged && !hasSubmittedInCurrentTerm) {
+              console.log("Term changed and no submission - redirecting to upload screen");
+              navigation.navigate("MainTabs", { screen: "ส่งเอกสาร" });
+            }
+          }
+        };
+        
+        checkUserData();
+      }
+    }
+  });
+
+  return () => unsubscribe();
+}, [navigation, processStatus, isLoading]);
 
   // 5. โหลดครั้งแรก
   useEffect(() => {
