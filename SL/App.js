@@ -7,7 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "./database/firebase";
-import { doc, onSnapshot, getDoc } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 
 // Import all screens
 import HomeScreen from "./student/HomeScreen";
@@ -45,126 +45,56 @@ const HomeStack = () => (
   </Stack.Navigator>
 );
 
-// Component to check document approval status and render appropriate screen
-const DocumentManagement = () => {
-  const [allDocsApproved, setAllDocsApproved] = useState(false);
-  const [isCheckingStatus, setIsCheckingStatus] = useState(true);
-  const [currentUser, setCurrentUser] = useState(null);
-
-  useEffect(() => {
-    const user = auth.currentUser;
-    if (user) {
-      setCurrentUser(user);
-      checkDocumentApprovalStatus(user.uid);
-    } else {
-      setIsCheckingStatus(false);
-    }
-  }, []);
-
-  const checkDocumentApprovalStatus = async (userId) => {
-    try {
-      // Get app config to determine current term
-      const configRef = doc(db, "DocumentService", "config");
-      const configDoc = await getDoc(configRef);
-      let collectionName = "document_submissions";
-
-      if (configDoc.exists()) {
-        const config = configDoc.data();
-        const termId = `${config.academicYear}_${config.term}`;
-        collectionName = `document_submissions_${termId}`;
-      }
-
-      // Set up real-time listener for user's document submissions
-      const userDocRef = doc(db, collectionName, userId);
-      const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
-        if (docSnap.exists()) {
-          const submissionData = docSnap.data();
-          const isAllApproved = checkIfAllDocumentsApproved(submissionData);
-          setAllDocsApproved(isAllApproved);
-        } else {
-          setAllDocsApproved(false);
-        }
-        setIsCheckingStatus(false);
-      });
-
-      return unsubscribe;
-    } catch (error) {
-      console.error("Error checking document approval status:", error);
-      setAllDocsApproved(false);
-      setIsCheckingStatus(false);
-    }
-  };
-
-  const checkIfAllDocumentsApproved = (submissionData) => {
-    if (!submissionData) return false;
-
-    // Check using new documentStatuses structure
-    if (submissionData.documentStatuses) {
-      const statuses = Object.values(submissionData.documentStatuses);
-      if (statuses.length === 0) return false;
-
-      // All documents must be approved
-      return statuses.every((doc) => doc.status === "approved");
-    }
-
-    // Fallback to old structure for backward compatibility
-    if (submissionData.uploads) {
-      const uploads = Object.values(submissionData.uploads);
-      if (uploads.length === 0) return false;
-
-      return uploads.every((upload) => {
-        const files = Array.isArray(upload) ? upload : [upload];
-        return files.every((file) => file.status === "approved");
-      });
-    }
-
-    return false;
-  };
-
-  if (isCheckingStatus) {
-    return <LoadingScreen />;
-  }
-
-  // If all documents are approved, show loan process status
-  if (allDocsApproved) {
-    return <LoanProcessStatus />;
-  }
-
-  // Otherwise, show document status screen
-  return <DocumentStatusScreen />;
-};
-
 const UploadStack = () => {
   const [isEnabled, setIsEnabled] = useState(null);
   const [hasSubmittedDocs, setHasSubmittedDocs] = useState(false);
   const [isCheckingSubmission, setIsCheckingSubmission] = useState(true);
+  const [currentPhase, setCurrentPhase] = useState(null);
+  const [currentTerm, setCurrentTerm] = useState(null);
+  const [lastSubmissionTerm, setLastSubmissionTerm] = useState(null);
+  const [loanHistory, setLoanHistory] = useState(null);
 
   useEffect(() => {
-    // Listen for changes in Firestore config
     const docRef = doc(db, "DocumentService", "config");
 
     const configUnsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const config = docSnap.data();
-        // Check immediateAccess and isEnabled values
         setIsEnabled(config.immediateAccess || config.isEnabled);
+        setCurrentTerm(config.term);
       } else {
         setIsEnabled(false);
       }
     });
 
-    // Check if user has submitted documents
     const checkUserSubmission = () => {
       const user = auth.currentUser;
       if (user) {
         const userRef = doc(db, "users", user.uid);
+        
         const userUnsubscribe = onSnapshot(userRef, (userDoc) => {
           if (userDoc.exists()) {
             const userData = userDoc.data();
+            const userLoanHistory = userData.loanHistory || {};
+            
+            console.log("=== UploadStack Real-time Update ===");
+            console.log("hasSubmittedDocuments:", userData.hasSubmittedDocuments);
+            console.log("currentPhase:", userLoanHistory.currentPhase);
+            console.log("phase1Approved:", userLoanHistory.phase1Approved);
+            console.log("disbursementSubmitted:", userLoanHistory.disbursementSubmitted);
+            console.log("disbursementApproved:", userLoanHistory.disbursementApproved);
+            console.log("lastSubmissionTerm:", userData.lastSubmissionTerm);
+            console.log("currentTerm (from config):", currentTerm);
+            console.log("=====================================");
+            
             setHasSubmittedDocs(userData.hasSubmittedDocuments || false);
+            setLastSubmissionTerm(userData.lastSubmissionTerm);
+            setCurrentPhase(userLoanHistory.currentPhase);
+            setLoanHistory(userLoanHistory);
           }
           setIsCheckingSubmission(false);
         });
+        
         return userUnsubscribe;
       } else {
         setIsCheckingSubmission(false);
@@ -178,9 +108,8 @@ const UploadStack = () => {
       configUnsubscribe();
       if (userUnsubscribe) userUnsubscribe();
     };
-  }, []);
+  }, [currentTerm]);
 
-  // Show loading screen while fetching data
   if (isEnabled === null || isCheckingSubmission) {
     return (
       <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -189,48 +118,100 @@ const UploadStack = () => {
     );
   }
 
+  console.log("=== UploadStack Decision ===");
+  console.log("hasSubmittedDocs:", hasSubmittedDocs);
+  console.log("currentPhase:", currentPhase);
+  console.log("lastSubmissionTerm:", lastSubmissionTerm);
+  console.log("currentTerm:", currentTerm);
+  console.log("isEnabled:", isEnabled);
+  console.log("loanHistory:", loanHistory);
+
+  let mainComponent;
+  let componentName = "";
+
+  const isNewTerm = lastSubmissionTerm !== currentTerm;
+
+  if (isNewTerm) {
+    console.log(`New term detected: ${lastSubmissionTerm} → ${currentTerm}`);
+    
+    // เทอม 2/3 = ให้อัพโหลดเอกสารเบิกเงินได้เลย
+    if (currentTerm === "2" || currentTerm === "3") {
+      mainComponent = isEnabled ? UploadScreen : DocCooldown;
+      componentName = isEnabled 
+        ? `UploadScreen (New Term ${currentTerm} - Disbursement)` 
+        : "DocCooldown";
+    } 
+    // เทอม 1 = ต้องทำ Phase 1 ก่อน
+    else {
+      mainComponent = isEnabled ? UploadScreen : DocCooldown;
+      componentName = isEnabled 
+        ? "UploadScreen (New Term 1 - Initial Application)" 
+        : "DocCooldown";
+    }
+    
+    console.log("isNewTerm:", isNewTerm);
+    console.log("Selected component:", componentName);
+    console.log("============================");
+    
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="UploadMain" component={mainComponent} />
+        <Stack.Screen name="DocumentStatusScreen" component={DocumentStatusScreen} />
+        <Stack.Screen name="LoanProcessStatus" component={LoanProcessStatus} />
+        <Stack.Screen name="UploadScreen" component={UploadScreen} />
+      </Stack.Navigator>
+    );
+  }
+
+  // กรณีที่อยู่ในเทอมเดียวกัน
+  if (hasSubmittedDocs && !isNewTerm) {
+    if (currentPhase === "completed") {
+      mainComponent = LoanProcessStatus;
+      componentName = "LoanProcessStatus (all approved)";
+      
+    } else if (currentPhase === "disbursement") {
+      if (loanHistory?.disbursementSubmitted) {
+        mainComponent = DocumentStatusScreen;
+        componentName = "DocumentStatusScreen (awaiting disbursement approval)";
+      } else {
+        mainComponent = UploadScreen;
+        componentName = "UploadScreen (upload disbursement docs)";
+      }
+      
+    } else if (currentPhase === "initial_application") {
+      mainComponent = DocumentStatusScreen;
+      componentName = "DocumentStatusScreen (awaiting phase1 approval)";
+      
+    } else {
+      mainComponent = DocumentStatusScreen;
+      componentName = "DocumentStatusScreen (fallback)";
+    }
+    
+  } else {
+    if (currentPhase === "disbursement" && loanHistory?.phase1Approved) {
+      mainComponent = isEnabled ? UploadScreen : DocCooldown;
+      componentName = isEnabled 
+        ? "UploadScreen (returning student - disbursement)" 
+        : "DocCooldown";
+        
+    } else {
+      mainComponent = isEnabled ? UploadScreen : DocCooldown;
+      componentName = isEnabled 
+        ? `UploadScreen (no submission)` 
+        : "DocCooldown";
+    }
+  }
+
+  console.log("isNewTerm:", isNewTerm);
+  console.log("Selected component:", componentName);
+  console.log("============================");
+
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen
-        name="UploadMain"
-        component={
-          hasSubmittedDocs
-            ? DocumentManagement
-            : isEnabled
-            ? UploadScreen
-            : DocCooldown
-        }
-      />
-      <Stack.Screen
-        name="DocumentStatusScreen"
-        component={DocumentStatusScreen}
-        options={{
-          title: "สถานะเอกสาร",
-          headerShown: false,
-          headerStyle: {
-            backgroundColor: "#2563eb",
-          },
-          headerTintColor: "#ffffff",
-          headerTitleStyle: {
-            fontWeight: "bold",
-          },
-        }}
-      />
-      <Stack.Screen
-        name="LoanProcessStatus"
-        component={LoanProcessStatus}
-        options={{
-          title: "สถานะการดำเนินการ",
-          headerShown: true,
-          headerStyle: {
-            backgroundColor: "#2563eb",
-          },
-          headerTintColor: "#ffffff",
-          headerTitleStyle: {
-            fontWeight: "bold",
-          },
-        }}
-      />
+      <Stack.Screen name="UploadMain" component={mainComponent} />
+      <Stack.Screen name="DocumentStatusScreen" component={DocumentStatusScreen} />
+      <Stack.Screen name="LoanProcessStatus" component={LoanProcessStatus} />
+      <Stack.Screen name="UploadScreen" component={UploadScreen} />
     </Stack.Navigator>
   );
 };
@@ -263,25 +244,24 @@ const App = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // onAuthStateChanged runs when the login status changes
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       console.log(
         "Auth state changed:",
         user ? "User logged in" : "User logged out"
       );
       if (user) {
-        // If user is logged in
+
         setIsAuthenticated(true);
       } else {
-        // If user is logged out
+
         setIsAuthenticated(false);
       }
-      setIsLoading(false); // Check is complete
+      setIsLoading(false);
     });
 
-    // Return the unsubscribe function to clean up when the component unmounts
     return () => unsubscribe();
-  }, []); // [] makes useEffect run only once on component mount
+  }, []);
 
   if (isLoading) {
     return (
