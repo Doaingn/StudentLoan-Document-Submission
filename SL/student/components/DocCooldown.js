@@ -7,7 +7,7 @@ import {
   SafeAreaView,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { db } from "../database/firebase";
+import { db } from "../../database/firebase";
 import { doc, onSnapshot } from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
 
