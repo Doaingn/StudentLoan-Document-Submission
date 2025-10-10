@@ -1,5 +1,5 @@
 import { Alert, Platform } from "react-native";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { doc, getDoc } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
@@ -179,8 +179,9 @@ const removePrefix = (studentID) => {
   firstPage.drawText(userData.phone_num || "-", { x: 285.12, y: 557.84, size: 12, font: customFont });
   firstPage.drawText(userData.major || "-", { x: 202.32, y: 484.56, size: 12, font: customFont });
   firstPage.drawText(userData.birthdate || "-", { x: 139.68, y: 573.12, size: 12, font: customFont });
-  firstPage.drawText(userData.school || "-", { x: 159.12, y: 503.28, size: 12, font: customFont });
-  firstPage.drawText(studentIDwithoutB.toString() || "-", { x: 165.56, y: 429.12, size: 12, font: customFont });
+  //firstPage.drawText(userData.school || "-", { x: 159.12, y: 503.28, size: 12, font: customFont }); อันนี้ข้อความมันห่าง
+  drawTextWithCharacterSpacing(firstPage, userData.school, 159.12, 503.28, customFont, 12);
+  firstPage.drawText(studentIDwithoutB.toString() || "-", { x: 165.56, y: 430, size: 12, font: customFont });
   firstPage.drawText(userData.siblings_count.toString() || "-", { x: 285.12, y: 412, size: 12, font: customFont });
   drawCitizenId(firstPage, userData.citizen_id, customFont, 596.88);
   drawBirthDate(firstPage, userData.birth_date, customFont, 578.16);
@@ -216,9 +217,10 @@ const removePrefix = (studentID) => {
     const annualIncomefather = calculateAnnualIncome(userData.father_info.income);
     secondPage.drawText(annualIncomefather.toString() || "-", { x: 100.08, y: 237.5, size: 12, font: customFont });
     // ข้อมูลที่อยู่ตามทะเบียนบ้าน
-    secondPage.drawText(userData.father_info.address_perm.house_no || "-", { x: 180, y: 220.5, size: 12, font: customFont });
+    secondPage.drawText(userData.father_info.address_perm.house_no || "-", { x: 180, y: 220.5, size: 9, font: customFont });
     secondPage.drawText(userData.father_info.address_perm.moo || "-", { x: 231, y: 220.5, size: 12, font: customFont });
-    secondPage.drawText(userData.father_info.address_perm.village || "-", { x: 304.56, y: 220.5, size: 12, font: customFont });
+    //secondPage.drawText(userData.father_info.address_perm.village || "-", { x: 304.56, y: 220.5, size: 12, font: customFont });
+    drawTextWithCharacterSpacing(secondPage, userData.father_info.address_perm.village, 304.56, 220.5, customFont, 12);
     secondPage.drawText(userData.father_info.address_perm.soi || "-", { x: 446.4, y: 220.5, size: 12, font: customFont });
     secondPage.drawText(userData.father_info.address_perm.road || "-", { x: 63.5, y: 203, size: 12, font: customFont });
     secondPage.drawText(userData.father_info.address_perm.sub_district || "-", { x: 205.2, y: 203, size: 12, font: customFont });
@@ -228,7 +230,8 @@ const removePrefix = (studentID) => {
     // ข้อมูลที่อยู่ปัจจุบัน
     secondPage.drawText(userData.father_info.address_current.house_no || "-", { x: 142.56, y: 166.5, size: 12, font: customFont });
     secondPage.drawText(userData.father_info.address_current.moo || "-", { x: 191.52, y: 166.5, size: 12, font: customFont });
-    secondPage.drawText(userData.father_info.address_current.village || "-", { x: 264.24, y: 166.5, size: 12, font: customFont });
+    //secondPage.drawText(userData.father_info.address_current.village || "-", { x: 264.24, y: 166.5, size: 12, font: customFont });
+    drawTextWithCharacterSpacing(secondPage, userData.father_info.address_current.village, 264.24, 166.5, customFont, 12);
     secondPage.drawText(userData.father_info.address_current.soi || "-", { x: 405.36, y: 166.5, size: 12, font: customFont });
     secondPage.drawText(userData.father_info.address_current.road || "-", { x: 65.52, y: 148.5, size: 12, font: customFont });
     secondPage.drawText(userData.father_info.address_current.sub_district || "-", { x: 203.76, y: 148.5, size: 12, font: customFont });
