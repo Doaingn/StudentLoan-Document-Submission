@@ -83,12 +83,17 @@ const UploadStack = () => {
             console.log("phase1Approved:", userLoanHistory.phase1Approved);
             console.log("disbursementSubmitted:", userLoanHistory.disbursementSubmitted);
             console.log("disbursementApproved:", userLoanHistory.disbursementApproved);
-            console.log("lastSubmissionTerm:", userData.lastSubmissionTerm);
+            console.log("lastSubmissionTerm:", userLoanHistory.lastSubmissionTerm);
             console.log("currentTerm (from config):", currentTerm);
             console.log("=====================================");
             
-            setHasSubmittedDocs(userData.hasSubmittedDocuments || false);
-            setLastSubmissionTerm(userData.lastSubmissionTerm);
+            // ตรวจสอบจาก loanHistory
+            const hasSubmittedInCurrentPhase = 
+              (userLoanHistory.currentPhase === "initial_application" && userLoanHistory.phase1Submitted) ||
+              (userLoanHistory.currentPhase === "disbursement" && userLoanHistory.disbursementSubmitted);
+            
+            setHasSubmittedDocs(hasSubmittedInCurrentPhase);
+            setLastSubmissionTerm(userLoanHistory.lastSubmissionTerm);
             setCurrentPhase(userLoanHistory.currentPhase);
             setLoanHistory(userLoanHistory);
           }
@@ -163,7 +168,7 @@ const UploadStack = () => {
     );
   }
 
-  // กรณีที่อยู่ในเทอมเดียวกัน
+  // ใช้ข้อมูลจาก loanHistory
   if (hasSubmittedDocs && !isNewTerm) {
     if (currentPhase === "completed") {
       mainComponent = LoanProcessStatus;
