@@ -60,6 +60,8 @@ export const updateLoanHistoryOnPhase1Submit = async (academicYear, term) => {
       "loanHistory.hasEverApplied": true,
       "loanHistory.firstApplicationYear": loanHistory.firstApplicationYear || academicYear,
       "loanHistory.firstApplicationTerm": loanHistory.firstApplicationTerm || term,
+      "loanHistory.lastSubmissionTerm": term,
+      "loanHistory.lastSubmissionYear": academicYear,
     });
     
     console.log("Updated loan history for Phase 1 submission");
@@ -79,6 +81,7 @@ export const updateLoanHistoryOnPhase1Approval = async (userId, academicYear, te
       "loanHistory.phase1Approved": true,
       "loanHistory.lastPhase1ApprovedYear": academicYear,
       "loanHistory.lastPhase1ApprovedTerm": term,
+      "loanHistory.hasCompletedPhase1Ever": true, // เพิ่มบันทึกว่าเคยทำ Phase 1 แล้ว
       // รีเซ็ตสถานะ disbursement สำหรับการส่งใหม่
       "loanHistory.disbursementSubmitted": false,
       "loanHistory.disbursementApproved": false,
@@ -104,6 +107,8 @@ export const updateLoanHistoryOnDisbursementSubmit = async (academicYear, term) 
       "loanHistory.currentPhase": "disbursement",
       "loanHistory.lastDisbursementSubmitYear": academicYear,
       "loanHistory.lastDisbursementSubmitTerm": term,
+      "loanHistory.lastSubmissionTerm": term, 
+      "loanHistory.lastSubmissionYear": academicYear,
     });
     
     console.log("Updated loan history for Disbursement submission");
@@ -147,13 +152,17 @@ export const resetLoanHistoryForNewYear = async (newYear, newTerm) => {
     
     // เก็บประวัติว่าเคยยื่นกู้มาก่อน
     const hasEverApplied = loanHistory.hasEverApplied || false;
+    const hasCompletedPhase1Ever = loanHistory.hasCompletedPhase1Ever || false;
     const firstYear = loanHistory.firstApplicationYear;
     const firstTerm = loanHistory.firstApplicationTerm;
     
     await updateDoc(userRef, {
       "loanHistory.currentPhase": "initial_application",
       "loanHistory.phase1Approved": false,
+      "loanHistory.disbursementSubmitted": false,
+      "loanHistory.disbursementApproved": false,
       "loanHistory.hasEverApplied": hasEverApplied,
+      "loanHistory.hasCompletedPhase1Ever": hasCompletedPhase1Ever, // เก็บไว้
       "loanHistory.firstApplicationYear": firstYear,
       "loanHistory.firstApplicationTerm": firstTerm,
     });
@@ -222,19 +231,11 @@ export const submitDocumentsToFirebase = async (
 
     const userRef = doc(db, "users", currentUser.uid);
     
-    // อัพเดทข้อมูลพื้นฐาน
-    await updateDoc(userRef, {
-      lastSubmissionAt: new Date().toISOString(),
-      hasSubmittedDocuments: true,
-      uploads: submissionData.uploads || {},
-      lastSubmissionTerm: `${term}`,
-      lastAcademicYear: academicYear,
-    });
-    
-    // อัพเดท loan history ตาม phase
     if (phase === "initial_application") {
       console.log("Updating Phase 1 submission status");
       await updateDoc(userRef, {
+        uploads: submissionData.uploads || {},
+        
         "loanHistory.currentPhase": "initial_application",
         "loanHistory.hasEverApplied": true,
         "loanHistory.firstApplicationYear": academicYear,
@@ -242,15 +243,21 @@ export const submitDocumentsToFirebase = async (
         "loanHistory.phase1Submitted": true,
         "loanHistory.lastPhase1SubmitTerm": term,
         "loanHistory.lastPhase1SubmitYear": academicYear,
+        "loanHistory.lastSubmissionTerm": term,
+        "loanHistory.lastSubmissionYear": academicYear,
       });
     } 
     else if (phase === "disbursement") {
       console.log("Updating disbursement submission status");
       await updateDoc(userRef, {
+        uploads: submissionData.uploads || {},
+        
         "loanHistory.disbursementSubmitted": true,
         "loanHistory.currentPhase": "disbursement",
         "loanHistory.lastDisbursementSubmitYear": academicYear,
         "loanHistory.lastDisbursementSubmitTerm": term,
+        "loanHistory.lastSubmissionTerm": term,
+        "loanHistory.lastSubmissionYear": academicYear,
       });
     }
 
