@@ -16,10 +16,10 @@ import {
   checkIDCardAIStatus,
   getIDCardTypeName,
 } from "./IDCardAI";
-// <<< เพิ่มเติมสำหรับ Income Certificate >>>
+
 import {
   validateIncomeCert,
-  showIncomeCertValidationAlert, // ตรวจสอบให้แน่ใจว่า import ฟังก์ชันนี้เข้ามา
+  showIncomeCertValidationAlert,
   checkIncomeCertAIStatus,
   getIncomeCertTypeName,
 } from "./IncomeCertAI";
@@ -72,7 +72,7 @@ export const checkAIBackendStatus = async () => {
       form101Status,
       consentFormStatus,
       idCardStatus,
-      incomeCertStatus, // <<< มีอยู่แล้ว >>>
+      incomeCertStatus,
       salaryCertStatus,
       familyStatusStatus,
       govIDCertStatus,
@@ -84,7 +84,7 @@ export const checkAIBackendStatus = async () => {
       checkForm101AIStatus(),
       checkConsentFormAIStatus(),
       checkIDCardAIStatus(),
-      checkIncomeCertAIStatus(), // <<< มีอยู่แล้ว >>>
+      checkIncomeCertAIStatus(),
       checkSalaryCertAIStatus(),
       checkFamilyStatusCertAIStatus(),
       checkGovIDCertAIStatus(),
@@ -97,7 +97,7 @@ export const checkAIBackendStatus = async () => {
     console.log("Form101 AI Status:", form101Status);
     console.log("ConsentForm AI Status:", consentFormStatus);
     console.log("IDCard AI Status:", idCardStatus);
-    console.log("IncomeCert AI Status:", incomeCertStatus); // <<< มีอยู่แล้ว >>>
+    console.log("IncomeCert AI Status:", incomeCertStatus);
     console.log("SalaryCert AI Status:", salaryCertStatus);
     console.log("FamilyStatus AI Status:", familyStatusStatus);
     console.log("GovIDCert AI Status:", govIDCertStatus);
@@ -110,7 +110,7 @@ export const checkAIBackendStatus = async () => {
       form101Status ||
       consentFormStatus ||
       idCardStatus ||
-      incomeCertStatus || // <<< มีอยู่แล้ว >>>
+      incomeCertStatus ||
       salaryCertStatus ||
       familyStatusStatus ||
       govIDCertStatus ||
@@ -530,7 +530,7 @@ export const getDocumentTypeName = (documentType) => {
     consent_father_form: "หนังสือยินยอมเปิดเผยข้อมูลบิดา",
     consent_mother_form: "หนังสือยินยอมเปิดเผยข้อมูลมารดา",
     guardian_consent: "หนังสือยินยอมเปิดเผยข้อมูลผู้ปกครอง",
-    // Income Certificate documents (<<< เพิ่มเติมส่วนที่ขาดหายไป >>>)
+    // Income Certificate documents
     father_income_cert: "หนังสือรับรองรายได้บิดา",
     mother_income_cert: "หนังสือรับรองรายได้มารดา",
     guardian_income_cert: "หนังสือรับรองรายได้ผู้ปกครอง",
@@ -598,7 +598,7 @@ export {
   validateForm101Document,
   validateConsentForm,
   validateIDCard,
-  validateIncomeCert, // <<< มีอยู่แล้ว >>>
+  validateIncomeCert,
   validateSalaryCert,
   validateFamilyStatusCert,
   validateGovIDCert,
@@ -608,7 +608,7 @@ export {
   showForm101ValidationAlert,
   showConsentFormValidationAlert,
   showIDCardValidationAlert,
-  showIncomeCertValidationAlert, // <<< มีอยู่แล้ว >>>
+  showIncomeCertValidationAlert,
   showSalaryCertValidationAlert,
   showFamilyStatusCertValidationAlert,
   showGovIDCertValidationAlert,
@@ -617,7 +617,7 @@ export {
   showTuitionExpenseValidationAlert,
   getConsentFormTypeName,
   getIDCardTypeName,
-  getIncomeCertTypeName, // <<< มีอยู่แล้ว >>>
+  getIncomeCertTypeName,
   getSalaryCertTypeName,
   getGovIDCertTypeName,
   getLegalStatusTypeName,

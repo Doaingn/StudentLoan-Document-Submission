@@ -18,7 +18,7 @@ const initializeGemini = () => {
   if (!genAI && GEMINI_API_KEY) {
     try {
       genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-      model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+      model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
       console.log('✓ Gemini AI initialized successfully for Form101');
       return true;
     } catch (error) {

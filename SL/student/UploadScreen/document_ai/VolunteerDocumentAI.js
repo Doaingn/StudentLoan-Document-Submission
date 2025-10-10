@@ -177,7 +177,7 @@ const initializeGemini = () => {
   if (!genAI && GEMINI_API_KEY && "AIzaSyCB5CXsuKesDyB4564AHcv1z8RogeyDUOY") {
     try {
       genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-      model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+      model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
       console.log(
         "✅ Gemini AI initialized successfully for VolunteerDocument"
       );
