@@ -217,7 +217,7 @@ const removePrefix = (studentID) => {
     const annualIncomefather = calculateAnnualIncome(userData.father_info.income);
     secondPage.drawText(annualIncomefather.toString() || "-", { x: 100.08, y: 237.5, size: 12, font: customFont });
     // ข้อมูลที่อยู่ตามทะเบียนบ้าน
-    secondPage.drawText(userData.father_info.address_perm.house_no || "-", { x: 180, y: 220.5, size: 9, font: customFont });
+    secondPage.drawText(userData.father_info.address_perm.house_no || "-", { x: 179, y: 220.5, size: 9, font: customFont });
     secondPage.drawText(userData.father_info.address_perm.moo || "-", { x: 231, y: 220.5, size: 12, font: customFont });
     //secondPage.drawText(userData.father_info.address_perm.village || "-", { x: 304.56, y: 220.5, size: 12, font: customFont });
     drawTextWithCharacterSpacing(secondPage, userData.father_info.address_perm.village, 304.56, 220.5, customFont, 12);
@@ -228,7 +228,7 @@ const removePrefix = (studentID) => {
     secondPage.drawText(userData.father_info.address_perm.province || "-", { x: 425.52, y: 203, size: 12, font: customFont });
     secondPage.drawText(userData.father_info.address_perm.zipcode || "-", { x: 101.52, y: 184, size: 12, font: customFont });
     // ข้อมูลที่อยู่ปัจจุบัน
-    secondPage.drawText(userData.father_info.address_current.house_no || "-", { x: 142.56, y: 166.5, size: 9, font: customFont });
+    secondPage.drawText(userData.father_info.address_current.house_no || "-", { x: 141, y: 166.5, size: 9, font: customFont });
     secondPage.drawText(userData.father_info.address_current.moo || "-", { x: 191.52, y: 166.5, size: 12, font: customFont });
     //secondPage.drawText(userData.father_info.address_current.village || "-", { x: 264.24, y: 166.5, size: 12, font: customFont });
     drawTextWithCharacterSpacing(secondPage, userData.father_info.address_current.village, 264.24, 166.5, customFont, 12);
