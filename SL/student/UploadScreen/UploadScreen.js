@@ -140,56 +140,7 @@ const checkCurrentPhase = async () => {
   }
 };
 
-
-// เพิ่มฟังก์ชันตรวจสอบและรีเซ็ต uploads เมื่อเทอมเปลี่ยน
-const checkAndResetForNewTerm = async (currentTerm, appConfig) => {
-  try {
-    const currentUser = auth.currentUser;
-    if (!currentUser) return false;
-
-    const userRef = doc(db, "users", currentUser.uid);
-    const userDoc = await getDoc(userRef);
-    
-    if (!userDoc.exists()) return false;
-    
-    const userData = userDoc.data();
-    const lastSubmissionTerm = userData.lastSubmissionTerm;
-    const lastAcademicYear = userData.lastAcademicYear;
-    
-    const currentAcademicYear = appConfig?.academicYear || "2568";
-    
-    console.log("Term Detection:", {
-      lastSubmissionTerm,
-      currentTerm,
-      lastAcademicYear,
-      currentAcademicYear
-    });
-    
-    // ตรวจสอบว่าเปลี่ยนเทอมหรือปีการศึกษา
-    const isNewTerm = lastSubmissionTerm !== currentTerm;
-    const isNewYear = lastAcademicYear !== currentAcademicYear;
-    
-    if (isNewTerm || isNewYear) {
-      console.log("New term/year detected - clearing uploads only");
-      
-      // ล้างแค่ uploads และ hasSubmittedDocuments
-      // ไม่ต้องอัพเดท lastSubmissionTerm (จะอัพเดทตอนส่งเอกสารจริง)
-      await updateDoc(userRef, {
-        uploads: {},
-        hasSubmittedDocuments: false,
-        lastUpdated: new Date().toISOString()
-      });
-      
-      return true; // บอกว่ามีการรีเซ็ต
-    }
-    
-    return false; // ไม่ได้รีเซ็ต
-  } catch (error) {
-    console.error("Error checking term change:", error);
-    return false;
-  }
-};
-
+// ในส่วน useEffect ที่ initialize data
 useEffect(() => {
   const initializeData = async () => {
     if (!configLoaded) return;
@@ -205,7 +156,7 @@ useEffect(() => {
         const userData = userDoc.data();
         const loanHistory = userData.loanHistory || {};
         
-        // ตรวจสอบว่า disbursementApproved เป็นของเทอมปัจจุบันหรือเทอมเก่า
+        // ✨ แก้ไข: ใช้จาก loanHistory
         const lastDisbursementTerm = loanHistory.lastDisbursementApprovedTerm;
         const isCurrentTermApproved = lastDisbursementTerm === term;
         
@@ -407,12 +358,6 @@ useEffect(() => {
           
           console.log("Showing approval alert for disbursement phase");
           hasShownAlert = true;
-          
-          Alert.alert(
-            "เอกสารเฟส 1 ได้รับการอนุมัติแล้ว!",
-            "คุณสามารถอัพโหลดเอกสารเบิกเงิน (เฟส 2) ได้แล้ว",
-            [{ text: "ตกลง" }]
-          );
         }
         
         // Navigation logic - ต้องตรวจสอบว่าเป็นเทอมปัจจุบัน
