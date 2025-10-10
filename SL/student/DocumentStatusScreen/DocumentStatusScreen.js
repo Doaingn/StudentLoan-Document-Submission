@@ -21,7 +21,6 @@ import {
 } from "firebase/storage";
 import { mergeImagesToPdf } from "../UploadScreen/utils/pdfMerger";
 
-// Import AI validation modules - เหมือนกับ UploadScreen
 import {
   validateDocument,
   showValidationAlert,
@@ -29,7 +28,6 @@ import {
   needsAIValidation,
 } from "../UploadScreen/documents_ai/UnifiedDocumentAI";
 
-// Import all components
 import LoadingScreen from "./components/LoadingScreen";
 import ErrorScreen from "./components/ErrorScreen";
 import HeaderSection from "./components/HeaderSection";
@@ -48,7 +46,6 @@ const isReuploadAllowed = (docId, submissionData) => {
     return status === "rejected";
   }
 
-  // เช็คจาก uploads (รูปแบบเก่า) สำหรับ backward compatibility
   if (submissionData.uploads && submissionData.uploads[docId]) {
     const filesData = submissionData.uploads[docId];
     const files = Array.isArray(filesData) ? filesData : [filesData];
@@ -56,7 +53,6 @@ const isReuploadAllowed = (docId, submissionData) => {
     return files.some(file => file.status === "rejected");
   }
 
-  // เช็คจากรูปแบบเก่า (submissionData[docId])
   if (submissionData[docId]) {
     const status = submissionData[docId].status;
     return status === "rejected";
@@ -346,7 +342,6 @@ const DocumentStatusScreen = ({ route, navigation }) => {
       });
 
       const pdfInfo = await FileSystem.getInfoAsync(pdfUri);
-      const originalName = imageFile.filename || imageFile.name || "image";
 
       const pdfFile = {
         filename: `${docId}.pdf`,
@@ -849,29 +844,72 @@ const DocumentStatusScreen = ({ route, navigation }) => {
     );
   };
 
-  // ฟังก์ชันลบเอกสารออกจาก Storage และ Firestore
-  const handleDeleteSubmission = async () => {
+  // ฟังก์ชันยกเลิกการส่งเอกสารที่เพิ่งส่งไป
+const handleDeleteSubmission = async () => {
+  try {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      Alert.alert("ข้อผิดพลาด", "ไม่พบข้อมูลผู้ใช้");
+      return;
+    }
+
+    // ดึงข้อมูลปัจจุบันจาก Firebase
+    const userRef = doc(db, "users", currentUser.uid);
+    const userDoc = await getDoc(userRef);
+    
+    if (!userDoc.exists()) {
+      Alert.alert("ข้อผิดพลาด", "ไม่พบข้อมูลผู้ใช้");
+      return;
+    }
+
+    const userData = userDoc.data();
+    const loanHistory = userData.loanHistory || {};
+    const currentPhase = loanHistory.currentPhase;
+    
+    // ตรวจสอบว่าเป็น phase ไหนที่เพิ่งส่ง
+    let canDelete = false;
+    let deleteMessage = "";
+    
+    if (currentPhase === "initial_application" && loanHistory.phase1Submitted) {
+      canDelete = true;
+      deleteMessage = "ยกเลิกการส่งเอกสารขอกู้ยืม (Phase 1)";
+    } else if (currentPhase === "disbursement" && loanHistory.disbursementSubmitted) {
+      canDelete = true;
+      deleteMessage = "ยกเลิกการส่งเอกสารเบิกเงิน (Disbursement)";
+    }
+
+    if (!canDelete) {
+      Alert.alert(
+        "ไม่สามารถยกเลิกได้",
+        "ไม่พบการส่งเอกสารที่สามารถยกเลิกได้ หรือเอกสารได้รับการอนุมัติแล้ว"
+      );
+      return;
+    }
+
     Alert.alert(
-      "ลบเอกสารทั้งหมด",
-      "คุณต้องการลบเอกสารทั้งหมดและทำใหม่หรือไม่? เอกสารจะถูกลบออกจากระบบทันที",
+      "ยืนยันการยกเลิก",
+      `คุณต้องการ${deleteMessage}หรือไม่?\n\nเอกสารทั้งหมดที่อัปโหลดจะถูกลบออกจากระบบ และคุณจะต้องทำรายการใหม่`,
       [
         { text: "ยกเลิก", style: "cancel" },
         {
-          text: "ลบทั้งหมด",
+          text: "ยืนยัน",
           style: "destructive",
           onPress: async () => {
             try {
               setIsLoading(true);
+
+              // 1. ลบไฟล์ใน Firebase Storage
+              const uploadsToDelete = userData.uploads || {};
               
-              // ลบไฟล์ใน Storage
-              if (submissionData?.uploads) {
-                for (const [docId, files] of Object.entries(submissionData.uploads)) {
+              if (Object.keys(uploadsToDelete).length > 0) {
+                for (const [docId, files] of Object.entries(uploadsToDelete)) {
                   const fileList = Array.isArray(files) ? files : [files];
                   
                   for (const file of fileList) {
                     if (file.storagePath) {
                       try {
-                        await deleteObject(storageRef(storage, file.storagePath));
+                        const fileRef = storageRef(storage, file.storagePath);
+                        await deleteObject(fileRef);
                         console.log(`Deleted file: ${file.storagePath}`);
                       } catch (err) {
                         console.warn(`Failed to delete file: ${file.storagePath}`, err);
@@ -880,30 +918,72 @@ const DocumentStatusScreen = ({ route, navigation }) => {
                   }
                 }
               }
+
+              // 2. ลบ document submission จาก collection
+              const academicYear = submissionData?.academicYear || loanHistory.lastSubmissionYear || "2568";
+              const term = submissionData?.term || loanHistory.lastSubmissionTerm || "1";
+              const collectionName = `document_submissions_${academicYear}_${term}`;
               
-              // ลบ document submission ใน Firestore
-              const collectionName = selectedTerm ? `document_submissions_${selectedTerm}` : `document_submissions_${submissionData?.academicYear || "2567"}_${submissionData?.term || "1"}`;
-              await deleteDoc(doc(db, collectionName, submissionData.userId));
-              
-              // อัพเดท users collection
-              await updateDoc(doc(db, 'users', submissionData.userId), {
-                hasSubmittedDocuments: false,
-                uploads: {},
-                lastSubmissionAt: null,
-                lastSubmissionTerm: null
-              });
-              
-              Alert.alert("ลบสำเร็จ", "คุณสามารถทำรายการใหม่ได้แล้ว");
-              if (navigation && navigation.navigate) {
-                  navigation.navigate("MainTabs");
-              } else {
-                  // กรณีฉุกเฉิน
-                  console.warn("Cannot navigate to MainTabs. Navigation prop error.");
+              try {
+                const submissionRef = doc(db, collectionName, currentUser.uid);
+                await deleteDoc(submissionRef);
+                console.log(`Deleted submission from ${collectionName}`);
+              } catch (err) {
+                console.warn(`Failed to delete submission:`, err);
               }
-              
+
+              // 3. อัพเดท loanHistory ตาม phase ที่ยกเลิก
+              const updates = {
+                uploads: {}, // ลบ uploads ทั้งหมด
+                lastUpdated: new Date().toISOString()
+              };
+
+              if (currentPhase === "initial_application") {
+                // ยกเลิก Phase 1
+                updates["loanHistory.phase1Submitted"] = false;
+                updates["loanHistory.lastPhase1SubmitTerm"] = null;
+                updates["loanHistory.lastPhase1SubmitYear"] = null;
+                updates["loanHistory.lastSubmissionTerm"] = null;
+                updates["loanHistory.lastSubmissionYear"] = null;
+                
+                console.log("Reverting Phase 1 submission");
+                
+              } else if (currentPhase === "disbursement") {
+                // ยกเลิก Disbursement
+                updates["loanHistory.disbursementSubmitted"] = false;
+                updates["loanHistory.lastDisbursementSubmitTerm"] = null;
+                updates["loanHistory.lastDisbursementSubmitYear"] = null;
+                updates["loanHistory.lastSubmissionTerm"] = null;
+                updates["loanHistory.lastSubmissionYear"] = null;
+                
+                console.log("Reverting Disbursement submission");
+              }
+
+              await updateDoc(userRef, updates);
+
+              // 4. แจ้งผลสำเร็จ
+              Alert.alert(
+                "ยกเลิกสำเร็จ",
+                "เอกสารถูกลบออกจากระบบแล้ว คุณสามารถทำรายการใหม่ได้",
+                [
+                  {
+                    text: "ตกลง",
+                    onPress: () => {
+                      // นำทางกลับไปหน้าอัปโหลด
+                      if (navigation) {
+                        navigation.replace("UploadMain");
+                      }
+                    }
+                  }
+                ]
+              );
+
             } catch (error) {
-              console.error("Error deleting submission:", error);
-              Alert.alert("เกิดข้อผิดพลาด", "ไม่สามารถลบเอกสารได้");
+              console.error("Error canceling submission:", error);
+              Alert.alert(
+                "เกิดข้อผิดพลาด",
+                `ไม่สามารถยกเลิกการส่งเอกสารได้: ${error.message}`
+              );
             } finally {
               setIsLoading(false);
             }
@@ -911,7 +991,11 @@ const DocumentStatusScreen = ({ route, navigation }) => {
         }
       ]
     );
-  };
+  } catch (error) {
+    console.error("Error in handleDeleteSubmission:", error);
+    Alert.alert("เกิดข้อผิดพลาด", "ไม่สามารถดำเนินการได้");
+  }
+};
 
   // ฟังก์ชันแสดงรายการเอกสารที่อัพโหลด
   const renderUploadedDocs = () => {
@@ -939,8 +1023,6 @@ const DocumentStatusScreen = ({ route, navigation }) => {
       />
     ));
   };
-
-  // ใน DocumentStatusScreen.js ให้แก้ไขส่วนนี้
 useEffect(() => {
   const currentUser = auth.currentUser;
   if (!currentUser || !submissionData || hasNavigated) return;
@@ -954,21 +1036,36 @@ useEffect(() => {
       const currentTerm = appConfig?.term;
       
       console.log("DocumentStatusScreen - LoanHistory update:", {
+        currentPhase: loanHistory.currentPhase,
         phase1Approved: loanHistory.phase1Approved,
         disbursementSubmitted: loanHistory.disbursementSubmitted,
         disbursementApproved: loanHistory.disbursementApproved,
+        lastPhase1ApprovedTerm: loanHistory.lastPhase1ApprovedTerm,
         lastDisbursementApprovedTerm: loanHistory.lastDisbursementApprovedTerm,
         currentTerm
       });
       
-      // ตรวจสอบว่า disbursementApproved เป็นของเทอมปัจจุบัน
-      const isCurrentTermApproved = 
+      // 1. ตรวจสอบว่า Phase 1 อนุมัติแล้วหรือยัง (สำหรับเทอม 1)
+      const isPhase1CurrentTermApproved = 
+        loanHistory.lastPhase1ApprovedTerm === currentTerm &&
+        loanHistory.phase1Approved === true &&
+        loanHistory.currentPhase === "disbursement";
+      
+      // 2. ตรวจสอบว่า Disbursement อนุมัติแล้วหรือยัง (สำหรับเทอม 2/3)
+      const isDisbursementCurrentTermApproved = 
         loanHistory.lastDisbursementApprovedTerm === currentTerm &&
         loanHistory.disbursementApproved === true;
       
-      // ไปหน้า LoanProcessStatus เฉพาะเมื่ออนุมัติในเทอมปัจจุบัน
-      if (isCurrentTermApproved && !hasNavigated) {
-        console.log("All disbursement documents approved for current term - navigating to LoanProcessStatus");
+      // 3. Phase 1 อนุมัติ ไปหน้าอัปโหลด Disbursement ทันที
+      if (isPhase1CurrentTermApproved && !loanHistory.disbursementSubmitted && !hasNavigated) {
+        console.log("Phase 1 approved for current term - navigating to Upload Disbursement");
+        setHasNavigated(true);
+        navigation.replace("UploadMain");
+      }
+      
+      // 4. Disbursement อนุมัติ ไปหน้า LoanProcessStatus
+      if (isDisbursementCurrentTermApproved && !hasNavigated) {
+        console.log("Disbursement approved for current term - navigating to LoanProcessStatus");
         setHasNavigated(true);
         navigation.replace("LoanProcessStatus");
       }
@@ -978,21 +1075,53 @@ useEffect(() => {
   return () => unsubscribe();
 }, [submissionData, navigation, hasNavigated, appConfig]);
 
-// แก้ไขส่วนเรนเดอร์ให้ตรวจสอบ phase ก่อนแสดง LoanProcessStatus
+// แก้ไขส่วนเรนเดอร์เพื่อไม่ให้แสดง LoanProcessStatus ถ้ายังไม่ได้ส่งเอกสาร Disbursement
 if (areAllDocumentsApproved()) {
   const currentPhase = submissionData?.phase || submissionData?.surveyData?.phase;
   const loanHistory = submissionData?.loanHistory || {};
   
-  // แสดง LoanProcessStatus เฉพาะเมื่อเป็น disbursement phase
-  if (currentPhase === "disbursement" || 
-      currentPhase === "disbursement_pending" ||
-      loanHistory.disbursementSubmitted === true) {
-    console.log("Showing LoanProcessStatus for disbursement phase");
+  console.log("All documents approved - checking phase:", {
+    currentPhase,
+    phase1Approved: loanHistory.phase1Approved,
+    disbursementSubmitted: loanHistory.disbursementSubmitted,
+    disbursementApproved: loanHistory.disbursementApproved
+  });
+  
+  // แสดง LoanProcessStatus เฉพาะเมื่อ Disbursement อนุมัติแล้ว
+  if (loanHistory.disbursementApproved === true) {
+    console.log("Showing LoanProcessStatus - disbursement approved");
     return <LoanProcessStatus navigation={navigation} />;
-  } else {
-    console.log("Phase 1 approved - staying in DocumentStatusScreen");
-    // ยังคงแสดง DocumentStatusScreen แต่แสดงสถานะว่าอนุมัติแล้ว
+  } 
+  
+  // ถ้า Phase 1 อนุมัติแล้ว แต่ยังไม่ส่ง Disbursement แสดงข้อความแจ้งเตือน
+  if (loanHistory.phase1Approved === true && 
+      loanHistory.currentPhase === "disbursement" &&
+      !loanHistory.disbursementSubmitted) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.approvedCard}>
+          <Ionicons name="checkmark-circle" size={80} color="#10b981" />
+          <Text style={styles.approvedTitle}>เอกสารได้รับการอนุมัติแล้ว</Text>
+          <Text style={styles.approvedSubtitle}>
+            เอกสารขอกู้ยืม (Phase 1) ของคุณได้รับการอนุมัติแล้ว
+          </Text>
+          <Text style={styles.approvedText}>
+            กรุณาอัปโหลดเอกสารเบิกเงินเพื่อดำเนินการในขั้นตอนต่อไป
+          </Text>
+          <TouchableOpacity 
+            style={styles.uploadButton}
+            onPress={() => navigation.replace("UploadMain")}
+          >
+            <Ionicons name="cloud-upload-outline" size={24} color="#fff" />
+            <Text style={styles.uploadButtonText}>อัปโหลดเอกสารเบิกเงิน</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
   }
+  
+  // Phase 1 approved แต่ยังไม่ย้ายเป็น disbursement phase
+  console.log("Phase 1 approved - staying in DocumentStatusScreen");
 }
   // แสดง Loading Screen
   if (isLoading) {
